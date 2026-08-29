@@ -8,11 +8,6 @@ class GitHubOAuthStartResponse(BaseModel):
     state: str
 
 
-class GitHubOAuthCallbackResponse(BaseModel):
-    github_username: str
-    sync_queued: bool
-
-
 class GitHubRepoAnalysis(BaseModel):
     area: str = Field(min_length=1, max_length=120)
     technologies: list[str] = Field(default_factory=list, max_length=30)

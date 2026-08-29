@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from app.core.config import settings
 from app.core.security import create_github_oauth_state, decode_github_oauth_state, encrypt_github_token
 from app.db.session import get_db
 from app.models.github_connection import GitHubConnection
-from app.schemas.github import GitHubOAuthCallbackResponse, GitHubOAuthStartResponse, GitHubSyncResponse
+from app.schemas.github import GitHubOAuthStartResponse, GitHubSyncResponse
 from app.graphs.pool_graph import run_pool_graph_for_user
 from app.services.github import GitHubAPIClient, GitHubAPIError, GitHubConfigurationError
 
@@ -57,7 +58,21 @@ def start_github_oauth(current_user: CurrentUser) -> GitHubOAuthStartResponse:
     )
 
 
-@router.get("/oauth/callback", response_model=GitHubOAuthCallbackResponse, status_code=status.HTTP_202_ACCEPTED)
+def _callback_redirect(**params: str) -> RedirectResponse:
+    """Send the browser back into the app instead of leaving it on a JSON body.
+
+    GitHub redirects the user agent here, so the response has to be a page the
+    user can continue from. The result is passed to the pool screen as query
+    parameters.
+    """
+    base = settings.frontend_base_url.rstrip("/")
+    return RedirectResponse(
+        url=f"{base}/pool?{urlencode(params)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.get("/oauth/callback")
 async def github_oauth_callback(
     background_tasks: BackgroundTasks,
     db: DbSession,
@@ -65,21 +80,21 @@ async def github_oauth_callback(
     sync_scheduler: GitHubSyncSchedulerDependency,
     code: str = Query(min_length=1),
     state: str = Query(min_length=1),
-) -> GitHubOAuthCallbackResponse:
+) -> RedirectResponse:
     try:
         user_id = decode_github_oauth_state(state)
     except (JWTError, KeyError, TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Gecersiz GitHub OAuth state") from None
+        return _callback_redirect(github="error", reason="invalid_state")
 
     try:
         token = await github_client.exchange_code_for_token(code)
         github_client.token = token
         username = await github_client.get_authenticated_username()
         encrypted_token = encrypt_github_token(token)
-    except (GitHubConfigurationError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
-    except GitHubAPIError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub OAuth cagrisi basarisiz") from exc
+    except (GitHubConfigurationError, ValueError):
+        return _callback_redirect(github="error", reason="not_configured")
+    except GitHubAPIError:
+        return _callback_redirect(github="error", reason="github_unavailable")
 
     connection = db.scalar(select(GitHubConnection).where(GitHubConnection.user_id == user_id))
     if connection is None:
@@ -91,7 +106,7 @@ async def github_oauth_callback(
     db.commit()
 
     sync_scheduler(background_tasks, user_id)
-    return GitHubOAuthCallbackResponse(github_username=username, sync_queued=True)
+    return _callback_redirect(github="connected", username=username)
 
 
 @router.post("/sync", response_model=GitHubSyncResponse, status_code=status.HTTP_202_ACCEPTED)

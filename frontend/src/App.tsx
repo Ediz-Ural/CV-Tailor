@@ -186,6 +186,27 @@ async function downloadBlob(path: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+type GithubCallback = { status: 'connected'; username: string } | { status: 'error'; reason: string | null }
+
+function readGithubCallback(): GithubCallback | null {
+  const params = new URLSearchParams(window.location.search)
+  const outcome = params.get('github')
+  if (!outcome) return null
+
+  const callback: GithubCallback = outcome === 'connected'
+    ? { status: 'connected', username: params.get('username') ?? '' }
+    : { status: 'error', reason: params.get('reason') }
+  // Drop the parameters so a refresh does not replay the message.
+  window.history.replaceState({}, '', window.location.pathname)
+  return callback
+}
+
+function githubCallbackErrorKey(reason: string | null) {
+  if (reason === 'not_configured') return 'pool.githubErrorNotConfigured'
+  if (reason === 'github_unavailable') return 'pool.githubErrorUnavailable'
+  return 'pool.githubErrorInvalidState'
+}
+
 function splitList(value: string) {
   return value
     .split(',')
@@ -507,9 +528,15 @@ function PoolPage({ onLogout }: { onLogout: () => void }) {
   const [uploadBusy, setUploadBusy] = useState(false)
   const [cvFile, setCvFile] = useState<File | null>(null)
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  const [syncLines, setSyncLines] = useState<string[]>(['pool.graph idle', 'sources: manual pdf github', 'pending approval gate ready'])
+  const [githubCallback] = useState(readGithubCallback)
+  const [error, setError] = useState(() => githubCallback?.status === 'error' ? t(githubCallbackErrorKey(githubCallback.reason)) : '')
+  const [message, setMessage] = useState(() => githubCallback?.status === 'connected' ? t('pool.githubConnected', { username: githubCallback.username }) : '')
+  const [syncLines, setSyncLines] = useState<string[]>(() => {
+    const base = ['pool.graph idle', 'sources: manual pdf github', 'pending approval gate ready']
+    if (githubCallback?.status === 'connected') return [`github.oauth connected ${githubCallback.username}`, 'pool.graph background job scheduled', ...base.slice(0, 1)]
+    if (githubCallback?.status === 'error') return [`github.oauth failed ${githubCallback.reason ?? 'unknown'}`, ...base.slice(0, 2)]
+    return base
+  })
 
   const refresh = useCallback(async () => {
     const [me, pool, pending] = await Promise.all([api.get<User>('/me'), api.get<PoolItem[]>('/pool-items'), api.get<PoolItem[]>('/pool/pending')])

@@ -165,10 +165,15 @@ def test_github_oauth_callback_encrypts_token_and_queues_background_sync() -> No
     app.dependency_overrides[get_github_oauth_client] = lambda: FakeGitHubOAuthClient()
     app.dependency_overrides[get_github_sync_scheduler] = lambda: fake_scheduler
 
-    callback = client.get(f"/github/oauth/callback?code=oauth-code&state={state}")
+    callback = client.get(f"/github/oauth/callback?code=oauth-code&state={state}", follow_redirects=False)
 
-    assert callback.status_code == 202
-    assert callback.json() == {"github_username": "octocat", "sync_queued": True}
+    # The user agent lands here from GitHub, so the response has to take the
+    # browser back into the app rather than render a JSON body.
+    assert callback.status_code == 303
+    location = callback.headers["location"]
+    assert location.startswith(f"{settings.frontend_base_url.rstrip('/')}/pool?")
+    assert "github=connected" in location
+    assert "username=octocat" in location
     assert len(queued) == 1
 
     with SessionLocal() as db:

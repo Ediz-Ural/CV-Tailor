@@ -1,6 +1,8 @@
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '')
 
-import { getAccessToken } from '@/lib/auth'
+import { clearAccessToken, getAccessToken } from '@/lib/auth'
+
+export const UNAUTHORIZED_EVENT = 'cv-tailor:unauthorized'
 
 export class ApiError extends Error {
   readonly status: number
@@ -27,6 +29,14 @@ function readErrorDetail(payload: unknown, status: number) {
   return `API istegi ${status} durumuyla basarisiz oldu`
 }
 
+function handleUnauthorized(status: number, hadToken: boolean) {
+  // Access tokens expire after 30 minutes and there is no refresh flow, so a 401
+  // on a request we authenticated means the session is over.
+  if (status !== 401 || !hadToken) return
+  clearAccessToken()
+  window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken()
   const response = await fetch(`${API_URL}${path.startsWith('/') ? path : `/${path}`}`, {
@@ -39,6 +49,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
+    handleUnauthorized(response.status, Boolean(token))
     const payload: unknown = await response.json().catch(() => null)
     throw new ApiError(readErrorDetail(payload, response.status), response.status)
   }
@@ -58,6 +69,7 @@ async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
   })
 
   if (!response.ok) {
+    handleUnauthorized(response.status, Boolean(token))
     const payload: unknown = await response.json().catch(() => null)
     throw new ApiError(readErrorDetail(payload, response.status), response.status)
   }
@@ -94,5 +106,13 @@ export const api = {
   },
   blob(path: string, init?: RequestInit) {
     return requestBlob(path, { ...init, method: 'GET' })
+  },
+  delete<T>(path: string, body?: unknown, init?: RequestInit) {
+    return request<T>(path, {
+      ...init,
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
   },
 }

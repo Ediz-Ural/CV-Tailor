@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react'
 
-import { ApiError, api } from '@/lib/api'
+import { ApiError, UNAUTHORIZED_EVENT, api } from '@/lib/api'
 import { supportedLanguages } from '@/i18n'
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/auth'
 
@@ -172,6 +172,18 @@ function navigate(path: Route, replace = false) {
 
 function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.detail : 'Beklenmeyen bir hata olustu.'
+}
+
+async function downloadBlob(path: string, filename: string) {
+  const blob = await api.blob(path)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function splitList(value: string) {
@@ -881,6 +893,7 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
   const [items, setItems] = useState<GeneratedCV[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const [me, cvs] = await Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs')])
@@ -888,14 +901,25 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
     setItems(cvs)
   }, [])
 
+  async function download(id: string) {
+    setDownloadingId(id); setError('')
+    try {
+      await downloadBlob(`/generated-cvs/${id}/download`, `cv-${id.slice(0, 8)}.pdf`)
+    } catch (caught) { setError(errorMessage(caught)) } finally { setDownloadingId(null) }
+  }
+
   useEffect(() => {
-    refresh()
+    Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs')])
+      .then(([me, cvs]) => {
+        setUser(me)
+        setItems(cvs)
+      })
       .catch((caught) => {
         if (caught instanceof ApiError && caught.status === 401) onLogout()
         else setError(errorMessage(caught))
       })
       .finally(() => setLoading(false))
-  }, [onLogout, refresh])
+  }, [onLogout])
 
   return <WorkspaceShell eyebrow={t('archive.eyebrow')} onLogout={onLogout} route="/archive" title={t('archive.title')} userEmail={user?.email}>
     <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
@@ -922,7 +946,7 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
             </div>
             <div className="mt-4 flex items-center justify-between gap-3">
               <span className="text-sm text-muted-foreground">{t('generate.atsScore')}: <strong className="text-foreground">{Math.round(item.ats_score ?? 0)}</strong></span>
-              <a className={`flex h-9 items-center gap-2 rounded-lg border px-3 text-sm hover:bg-secondary ${item.pdf_path ? '' : 'pointer-events-none opacity-50'}`} download={`cv-${item.id}.pdf`} href={`/api/generated-cvs/${item.id}/download`}><Download className="size-4" />{item.pdf_path ? t('common.downloadPdf') : t('archive.pdfPending')}</a>
+              <button className="flex h-9 items-center gap-2 rounded-lg border px-3 text-sm hover:bg-secondary disabled:opacity-50" disabled={!item.pdf_path || downloadingId === item.id} onClick={() => void download(item.id)} type="button">{downloadingId === item.id ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{item.pdf_path ? t('common.downloadPdf') : t('archive.pdfPending')}</button>
             </div>
           </article>
         ))}
@@ -936,6 +960,11 @@ function App() {
   const [authenticated, setAuthenticated] = useState(() => Boolean(getAccessToken()))
 
   useEffect(() => { const sync = () => setRoute(routeFromPath()); window.addEventListener('popstate', sync); return () => window.removeEventListener('popstate', sync) }, [])
+  useEffect(() => {
+    const expire = () => { setAuthenticated(false); navigate('/login', true) }
+    window.addEventListener(UNAUTHORIZED_EVENT, expire)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, expire)
+  }, [])
   useEffect(() => {
     if (!authenticated && (route === '/profile' || route === '/pool' || route === '/generate' || route === '/archive')) navigate('/login', true)
     if (authenticated && (route === '/login' || route === '/register')) navigate('/profile', true)

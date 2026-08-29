@@ -18,7 +18,7 @@ from app.api.pool import router as pool_router
 from app.api.pdf_import import router as pdf_import_router
 from app.api.pool_items import router as pool_items_router
 from app.api.profile import router as profile_router
-from app.core.config import settings
+from app.core.config import PLACEHOLDER_JWT_SECRETS, settings
 from app.core.logging import configure_sensitive_logging
 from app.db.session import SessionLocal
 from app.services.cv_progress import cv_progress_store
@@ -27,6 +27,19 @@ from app.services.render_queue import render_queue_metrics
 configure_sensitive_logging(json_logs=settings.log_format == "json", log_level=settings.log_level)
 app = FastAPI(title="CV-Tailor API")
 logger = logging.getLogger(__name__)
+
+if settings.jwt_secret in PLACEHOLDER_JWT_SECRETS:
+    logger.warning(
+        "insecure_jwt_secret",
+        extra={
+            "event": "insecure_jwt_secret",
+            "detail": (
+                "JWT_SECRET is still the example value. It is published in this "
+                "repository, so anyone can mint tokens for any account. Set a "
+                "random secret before exposing this deployment."
+            ),
+        },
+    )
 
 app.add_middleware(
     CORSMiddleware,

@@ -92,3 +92,18 @@ def test_package_logs_do_not_contain_plaintext_token_fixtures() -> None:
     logs_text = "\n".join(path.read_text(encoding="utf-8") for path in logs_dir.glob("*.md"))
     assert "gho_plain_secret" not in logs_text
     assert "gho_graph_secret" not in logs_text
+
+
+def test_example_jwt_secret_is_recognised_as_a_placeholder() -> None:
+    # A deployment left on the published example secret can have its tokens
+    # forged by anyone, so startup has to be able to spot it.
+    from app.core.config import PLACEHOLDER_JWT_SECRETS
+
+    example_env = Path(__file__).resolve().parents[2] / ".env.example"
+    example_secret = next(
+        line.split("=", 1)[1].strip()
+        for line in example_env.read_text(encoding="utf-8").splitlines()
+        if line.startswith("JWT_SECRET=")
+    )
+
+    assert example_secret in PLACEHOLDER_JWT_SECRETS

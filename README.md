@@ -10,7 +10,14 @@ Her iki yolda da önce ortam dosyasını hazırlayın:
 Copy-Item .env.example .env
 ```
 
-`JWT_SECRET` ve `LLM_API_KEY` alanlarını doldurun. `GITHUB_TOKEN_ENCRYPTION_KEY` için bir Fernet anahtarı üretin:
+`JWT_SECRET` ve `LLM_API_KEY` alanlarını doldurun. `JWT_SECRET`'i mutlaka değiştirin —
+`.env.example`'daki değer herkese açıktır ve onunla herhangi bir hesap için token üretilebilir:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+`GITHUB_TOKEN_ENCRYPTION_KEY` için bir Fernet anahtarı üretin:
 
 ```powershell
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -19,8 +26,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 ### Yol 1 — Tüm stack Docker'da
 
 ```powershell
-docker compose -f infra/docker-compose.yml --profile app up --build
+docker compose --env-file .env -f infra/docker-compose.yml --profile app up --build
 ```
+
+`--env-file .env` şart: Compose `.env` dosyasını compose dosyasının bulunduğu dizine (`infra/`) göre arar, kök dizindeki `.env` bu bayrak olmadan sessizce yok sayılır ve `LLM_API_KEY` boş kalır.
 
 Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır. Arayüz kendi nginx'i üzerinden `/api` yolunu backend'e proxy'ler.
 
@@ -29,7 +38,7 @@ Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır
 Arayüzde anlık yenileme (HMR) isteyen geliştirme akışı budur.
 
 ```powershell
-docker compose -f infra/docker-compose.yml up -d db
+docker compose --env-file .env -f infra/docker-compose.yml up -d db
 
 cd backend
 uv sync
@@ -64,7 +73,7 @@ npm test
 Backend testleri gerçek bir PostgreSQL'e bağlanır ve tablolardaki kayıtları siler. Bu yüzden yalnızca adı `_test` veya `_ci` ile biten bir veritabanına karşı çalışırlar:
 
 ```powershell
-docker compose -f infra/docker-compose.yml exec db createdb -U cv_tailor cv_tailor_test
+docker compose --env-file .env -f infra/docker-compose.yml exec db createdb -U cv_tailor cv_tailor_test
 $env:DATABASE_URL = "postgresql+psycopg://cv_tailor:cv_tailor_dev@localhost:5432/cv_tailor_test"
 cd backend
 uv run alembic upgrade head

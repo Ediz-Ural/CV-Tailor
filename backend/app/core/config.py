@@ -45,6 +45,16 @@ class Settings(BaseSettings):
         return [origin.strip().rstrip("/") for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
 
+# Values shipped in .env.example and the compose defaults. They are public, so a
+# deployment still using one of them can have its tokens forged by anyone.
+PLACEHOLDER_JWT_SECRETS = frozenset(
+    {
+        "change-me-to-a-long-random-secret",
+        "development-only-change-me",
+    }
+)
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

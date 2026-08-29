@@ -135,6 +135,14 @@ type CVGenerationStatus = {
   error: string | null
 }
 
+type Job = {
+  id: string
+  source_url: string | null
+  raw_text: string
+  parsed_requirements_json: { summary?: string } | null
+  created_at: string
+}
+
 type GeneratedCV = {
   id: string
   job_id: string
@@ -212,6 +220,14 @@ function githubCallbackErrorKey(reason: string | null) {
   if (reason === 'not_configured') return 'pool.githubErrorNotConfigured'
   if (reason === 'github_unavailable') return 'pool.githubErrorUnavailable'
   return 'pool.githubErrorInvalidState'
+}
+
+function jobLabel(job: Job) {
+  const summary = job.parsed_requirements_json?.summary?.trim()
+  if (summary) return summary.length > 120 ? `${summary.slice(0, 117)}...` : summary
+  if (job.source_url) return job.source_url
+  const firstLine = job.raw_text.split('\n').map((line) => line.trim()).find(Boolean) ?? ''
+  return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine
 }
 
 function splitList(value: string) {
@@ -1023,15 +1039,21 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation()
   const [user, setUser] = useState<User | null>(null)
   const [items, setItems] = useState<GeneratedCV[]>([])
+  const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    const [me, cvs] = await Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs')])
+    const [me, cvs, jobList] = await Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs'), api.get<Job[]>('/jobs')])
     setUser(me)
     setItems(cvs)
+    setJobs(jobList)
   }, [])
+
+  // Without this the archive is a list of opaque ids: nothing says which posting
+  // each CV was written for.
+  const jobLabels = useMemo(() => new Map(jobs.map((job) => [job.id, jobLabel(job)])), [jobs])
 
   async function download(id: string) {
     setDownloadingId(id); setError('')
@@ -1041,10 +1063,11 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
   }
 
   useEffect(() => {
-    Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs')])
-      .then(([me, cvs]) => {
+    Promise.all([api.get<User>('/me'), api.get<GeneratedCV[]>('/generated-cvs'), api.get<Job[]>('/jobs')])
+      .then(([me, cvs, jobList]) => {
         setUser(me)
         setItems(cvs)
+        setJobs(jobList)
       })
       .catch((caught) => {
         if (caught instanceof ApiError && caught.status === 401) onLogout()
@@ -1072,7 +1095,8 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-[11px] text-muted-foreground">{item.created_at ? new Date(item.created_at).toLocaleString() : item.id.slice(0, 8)}</p>
-                <h3 className="mt-2 text-sm font-semibold">CV #{item.id.slice(0, 8)}</h3>
+                <h3 className="mt-2 text-sm font-semibold">{jobLabels.get(item.job_id) ?? t('archive.jobUnknown')}</h3>
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">CV #{item.id.slice(0, 8)}</p>
               </div>
               <span className="rounded-md border bg-secondary px-2 py-1 font-mono text-[11px] text-muted-foreground">{item.output_language}</span>
             </div>

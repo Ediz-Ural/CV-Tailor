@@ -96,6 +96,7 @@ export const resources = {
         loading: 'CV arsivi yukleniyor...',
         empty: 'Henuz uretilmis CV yok.',
         pdfPending: `${TECH_TERMS.pdf} bekleniyor`,
+        jobUnknown: 'Ilan bilgisi bulunamadi',
       },
       profile: {
         eyebrow: `${TECH_TERMS.workspace} / Profile`,
@@ -283,6 +284,7 @@ export const resources = {
         loading: 'Loading CV archive...',
         empty: 'No generated CV exists yet.',
         pdfPending: `${TECH_TERMS.pdf} pending`,
+        jobUnknown: 'Job details unavailable',
       },
       profile: {
         eyebrow: `${TECH_TERMS.workspace} / Profile`,

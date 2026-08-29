@@ -166,6 +166,10 @@ export const resources = {
         missingKeyword: 'Eksik keyword',
         noDiff: `${TECH_TERMS.diff} verisi uretilmedi.`,
         tailoredItem: 'Tailored item',
+        beforeAfter: `${TECH_TERMS.before}/${TECH_TERMS.after} ${TECH_TERMS.diff}`,
+        failedTitle: `${TECH_TERMS.pipeline} tamamlanamadi`,
+        failedUnknown: 'Beklenmeyen bir hata olustu. Ilan metnini kontrol edip tekrar dene.',
+        failedRetry: 'Tekrar dene',
       },
       labels: {
         experience: 'Deneyim',
@@ -328,6 +332,10 @@ export const resources = {
         missingKeyword: 'Missing keyword',
         noDiff: `No ${TECH_TERMS.diff} data was generated.`,
         tailoredItem: 'Tailored item',
+        beforeAfter: `${TECH_TERMS.before}/${TECH_TERMS.after} ${TECH_TERMS.diff}`,
+        failedTitle: `The ${TECH_TERMS.pipeline} did not finish`,
+        failedUnknown: 'Something went wrong. Check the job text and try again.',
+        failedRetry: 'Try again',
       },
       labels: {
         experience: 'Experience',

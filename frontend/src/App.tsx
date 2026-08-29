@@ -9,6 +9,7 @@ import {
   FileText,
   Filter,
   GitBranch,
+  GitCompare,
   Layers3,
   LinkIcon,
   Library,
@@ -20,6 +21,7 @@ import {
   ShieldCheck,
   Sparkles,
   Tags,
+  TriangleAlert,
   Trophy,
   Upload,
   UserRound,
@@ -29,6 +31,7 @@ import {
 
 import { ApiError, UNAUTHORIZED_EVENT, api } from '@/lib/api'
 import { supportedLanguages } from '@/i18n'
+import { TECH_TERMS } from '@/i18n/resources'
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/auth'
 
 type Route = '/login' | '/register' | '/profile' | '/pool' | '/generate' | '/archive'
@@ -785,6 +788,42 @@ function ATSRecommendations({ recommendations }: { recommendations: string[] }) 
   </section>
 }
 
+function PipelineFailure({ detail, onRetry }: { detail: string | null; onRetry: () => void }) {
+  const { t } = useTranslation()
+
+  return <div className="grid min-h-[520px] place-items-center rounded-xl border border-danger/30 bg-danger/5 p-8 text-center">
+    <div>
+      <TriangleAlert className="mx-auto size-10 text-danger" />
+      <p className="mt-4 text-2xl font-semibold tracking-tight">{t('generate.failedTitle')}</p>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{detail || t('generate.failedUnknown')}</p>
+      <button className="mt-6 h-10 rounded-lg border bg-background px-4 text-sm hover:bg-secondary" onClick={onRetry} type="button">{t('generate.failedRetry')}</button>
+    </div>
+  </div>
+}
+
+function BeforeAfterDiffPanel({ entries }: { entries: BeforeAfterDiff[] }) {
+  const { t } = useTranslation()
+
+  return <section className="rounded-xl border bg-card/90 p-4">
+    <div className="flex items-center gap-2"><GitCompare className="size-4 text-primary" /><h3 className="text-sm font-semibold">{t('generate.beforeAfter')}</h3></div>
+    {entries.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">{t('generate.noDiff')}</p> : <div className="mt-4 space-y-4">
+      {entries.map((entry) => <article className="rounded-lg border bg-background/70 p-3" key={entry.source_pool_item_id}>
+        <p className="text-sm font-medium">{entry.title || t('generate.tailoredItem')}</p>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{TECH_TERMS.before}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{entry.before}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">{TECH_TERMS.after}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{entry.after}</p>
+          </div>
+        </div>
+      </article>)}
+    </div>}
+  </section>
+}
+
 function GeneratePage({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation()
   const [user, setUser] = useState<User | null>(null)
@@ -844,6 +883,7 @@ function GeneratePage({ onLogout }: { onLogout: () => void }) {
   }
 
   const done = status?.status === 'completed'
+  const failed = status?.status === 'failed'
 
   return <WorkspaceShell eyebrow={t('generate.eyebrow')} onLogout={onLogout} route="/generate" title={t('generate.title')} userEmail={user?.email}>
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
@@ -876,7 +916,7 @@ function GeneratePage({ onLogout }: { onLogout: () => void }) {
         </aside>
 
         <section className="space-y-5">
-          {!done ? <div className="grid min-h-[520px] place-items-center rounded-xl border bg-card/70 p-8 text-center">
+          {failed ? <PipelineFailure detail={status.error} onRetry={() => setStatus(null)} /> : !done ? <div className="grid min-h-[520px] place-items-center rounded-xl border bg-card/70 p-8 text-center">
             <div>
               <Sparkles className="mx-auto size-10 text-primary" />
               <p className="mt-4 text-2xl font-semibold tracking-tight">{t('generate.showcasePendingTitle')}</p>
@@ -888,6 +928,7 @@ function GeneratePage({ onLogout }: { onLogout: () => void }) {
               <section className="space-y-3">
                 <JobSummaryCard summary={status.job_summary} />
                 <ATSRecommendations recommendations={status.ats_recommendations} />
+                <BeforeAfterDiffPanel entries={status.before_after_diff ?? []} />
                 <section className="rounded-xl border bg-card/90 p-4">
                   <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t('generate.selectedItems')}</h3><span className="font-mono text-xs text-muted-foreground">{selectedItems.length}</span></div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">{selectedItems.map((item) => <PoolItemRow item={item} key={item.id} />)}</div>

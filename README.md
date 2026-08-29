@@ -33,6 +33,13 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile app up --bu
 
 Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır. Arayüz kendi nginx'i üzerinden `/api` yolunu backend'e proxy'ler.
 
+İlk çalıştırmada beklenecek iki şey var:
+
+- **İlk build birkaç dakika sürer.** Backend imajı Typst'i indirir, frontend imajı `npm ci` çalıştırır.
+- **Havuza eklenen ilk öğe yaklaşık 1,5 dakika sürer.** `EMBEDDING_MODEL` ilk kullanımda indirilir (yaklaşık 2 GB) ve `fastembed_cache` volume'üne yazılır; sonraki istekler anında döner. Ekran donmuş gibi görünebilir, beklemek yeterlidir.
+
+CV üretimi gerçek bir `LLM_API_KEY` gerektirir. Anahtar yanlışsa pipeline `failed` olur ve arayüzdeki hata kartında sebebi görünür (`openai rejected the API key (HTTP 401). Check LLM_API_KEY.`).
+
 ### Yol 2 — Veritabanı Docker'da, uygulama yerelde
 
 Arayüzde anlık yenileme (HMR) isteyen geliştirme akışı budur.

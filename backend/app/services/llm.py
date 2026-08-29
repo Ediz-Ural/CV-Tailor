@@ -28,6 +28,24 @@ class LLMStructuredOutputError(LLMError):
     pass
 
 
+def _provider_error_message(provider: str, exc: Exception, timeout_seconds: float) -> str:
+    """Say enough for the user to act on it.
+
+    A bare "openai request failed" reaches the UI with no hint that the cause is
+    usually an unset or wrong API key.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        if status_code in (401, 403):
+            return f"{provider} rejected the API key (HTTP {status_code}). Check LLM_API_KEY."
+        if status_code == 429:
+            return f"{provider} rate limit reached (HTTP 429). Try again shortly."
+        return f"{provider} request failed with HTTP {status_code}"
+    if isinstance(exc, httpx.TimeoutException):
+        return f"{provider} request timed out after {timeout_seconds:g}s"
+    return f"{provider} could not be reached"
+
+
 class LLMService:
     def __init__(
         self,
@@ -122,7 +140,9 @@ class LLMService:
                 except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError) as exc:
                     retryable = not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code in retry_statuses
                     if not retryable or attempt == self.config.llm_max_retries:
-                        raise LLMProviderError(f"{provider} request failed") from exc
+                        raise LLMProviderError(
+                            _provider_error_message(provider, exc, self.config.llm_timeout_seconds)
+                        ) from exc
                 await asyncio.sleep(min(2**attempt, 4))
         finally:
             if should_close:

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.core.config import EMBEDDING_DIMENSION, Settings
 from app.schemas.job import JobRequirementExtraction
 from app.services.embeddings import EmbeddingError, EmbeddingService, detect_language
-from app.services.llm import LLMService, _openai_strict_json_schema
+from app.services.llm import LLMProviderError, LLMService, _openai_strict_json_schema
 
 
 class FakeEncoder:
@@ -197,3 +197,19 @@ async def test_llm_retries_transient_provider_error(monkeypatch: pytest.MonkeyPa
 
     assert attempts == 2
     assert result.language == "en"
+
+
+@pytest.mark.asyncio
+async def test_rejected_api_key_error_names_the_setting_to_fix() -> None:
+    # "openai request failed" reaches the pipeline UI verbatim, so it has to say
+    # what the user should actually change.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": "invalid_api_key"})
+
+    config = Settings(llm_api_key="wrong-key", llm_max_retries=0)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(LLMProviderError) as caught:
+            await LLMService(config, client).structured("Parse this", Summary)
+
+    assert "LLM_API_KEY" in str(caught.value)
+    assert "401" in str(caught.value)

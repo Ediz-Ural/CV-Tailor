@@ -18,9 +18,11 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Settings,
   ShieldCheck,
   Sparkles,
   Tags,
+  Trash2,
   TriangleAlert,
   Trophy,
   Upload,
@@ -34,7 +36,7 @@ import { supportedLanguages } from '@/i18n'
 import { TECH_TERMS } from '@/i18n/resources'
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/auth'
 
-type Route = '/login' | '/register' | '/profile' | '/pool' | '/generate' | '/archive'
+type Route = '/login' | '/register' | '/profile' | '/pool' | '/generate' | '/archive' | '/account'
 type PoolType = 'experience' | 'project' | 'skill' | 'education'
 type PoolSource = 'pdf' | 'github' | 'manual'
 type TypeFilter = 'all' | PoolType
@@ -165,6 +167,7 @@ function routeFromPath(): Route {
   if (window.location.pathname === '/pool') return '/pool'
   if (window.location.pathname === '/generate') return '/generate'
   if (window.location.pathname === '/archive') return '/archive'
+  if (window.location.pathname === '/account') return '/account'
   return '/login'
 }
 
@@ -384,6 +387,7 @@ function WorkspaceShell({ children, onLogout, route, title, eyebrow, userEmail }
         {navItem('/pool', t('nav.pool'), <Library className="size-4" />)}
         {navItem('/generate', t('nav.generate'), <Wand2 className="size-4" />)}
         {navItem('/archive', t('nav.archive'), <FileText className="size-4" />)}
+        {navItem('/account', t('nav.account'), <Settings className="size-4" />)}
       </nav>
       <div className="border-t p-3"><button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-secondary" onClick={onLogout} type="button"><LogOut className="size-4" />{t('nav.logout')}</button></div>
     </aside>
@@ -1023,6 +1027,77 @@ function ArchivePage({ onLogout }: { onLogout: () => void }) {
   </WorkspaceShell>
 }
 
+const DELETE_ACCOUNT_CONFIRMATION = 'HESABIMI SIL'
+
+function AccountPage({ onLogout }: { onLogout: () => void }) {
+  const { t } = useTranslation()
+  const [user, setUser] = useState<User | null>(null)
+  const [notice, setNotice] = useState<KVKKNotice | null>(null)
+  const [confirmation, setConfirmation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    Promise.all([api.get<User>('/me'), api.get<KVKKNotice>('/kvkk/aydinlatma')])
+      .then(([me, kvkkNotice]) => {
+        setUser(me)
+        setNotice(kvkkNotice)
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiError && caught.status === 401) onLogout()
+        else setError(errorMessage(caught))
+      })
+  }, [onLogout])
+
+  const canDelete = confirmation.trim() === DELETE_ACCOUNT_CONFIRMATION
+
+  async function remove(event: FormEvent) {
+    event.preventDefault()
+    if (!canDelete) { setError(t('account.deleteMismatch')); return }
+    setBusy(true); setError('')
+    try {
+      await api.delete('/account', { confirmation: DELETE_ACCOUNT_CONFIRMATION })
+      onLogout()
+    } catch (caught) { setError(errorMessage(caught)); setBusy(false) }
+  }
+
+  return <WorkspaceShell eyebrow={t('account.eyebrow')} onLogout={onLogout} route="/account" title={t('account.title')} userEmail={user?.email}>
+    <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+      <div className="mb-8 flex items-start gap-4">
+        <span className="grid size-11 place-items-center rounded-xl border bg-primary/10 text-primary"><Settings className="size-5" /></span>
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight">{t('account.heading')}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t('account.description')}</p>
+        </div>
+      </div>
+
+      {error && <p className="mb-5 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+
+      {notice && <section className="mb-5 rounded-xl border bg-card/90 p-5">
+        <div className="flex items-center gap-2"><ShieldCheck className="size-4 text-primary" /><h3 className="text-sm font-semibold">{t('account.noticeTitle')}</h3></div>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">{t('auth.version', { version: notice.version })}</p>
+        <div className="mt-4 max-h-64 space-y-3 overflow-auto text-sm leading-6">
+          {notice.sections.map((section) => <article key={section.title}>
+            <h4 className="font-medium">{section.title}</h4>
+            <p className="mt-1 text-muted-foreground">{section.body}</p>
+          </article>)}
+        </div>
+      </section>}
+
+      <section className="rounded-xl border border-danger/30 bg-danger/5 p-5">
+        <div className="flex items-center gap-2"><Trash2 className="size-4 text-danger" /><h3 className="text-sm font-semibold text-danger">{t('account.deleteTitle')}</h3></div>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{t('account.deleteDescription')}</p>
+        <form className="mt-5 space-y-4" onSubmit={remove}>
+          <Field label={t('account.deleteConfirmLabel', { phrase: DELETE_ACCOUNT_CONFIRMATION })} onChange={(event) => setConfirmation(event.target.value)} placeholder={DELETE_ACCOUNT_CONFIRMATION} value={confirmation} />
+          <button className="flex h-11 items-center justify-center gap-2 rounded-lg bg-danger px-5 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !canDelete} type="submit">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{busy ? t('account.deleteBusy') : t('account.deleteSubmit')}
+          </button>
+        </form>
+      </section>
+    </main>
+  </WorkspaceShell>
+}
+
 function App() {
   const [route, setRoute] = useState<Route>(routeFromPath)
   const [authenticated, setAuthenticated] = useState(() => Boolean(getAccessToken()))
@@ -1034,7 +1109,7 @@ function App() {
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, expire)
   }, [])
   useEffect(() => {
-    if (!authenticated && (route === '/profile' || route === '/pool' || route === '/generate' || route === '/archive')) navigate('/login', true)
+    if (!authenticated && route !== '/login' && route !== '/register') navigate('/login', true)
     if (authenticated && (route === '/login' || route === '/register')) navigate('/profile', true)
   }, [authenticated, route])
 
@@ -1044,6 +1119,7 @@ function App() {
   if (route === '/pool') return <PoolPage onLogout={logout} />
   if (route === '/generate') return <GeneratePage onLogout={logout} />
   if (route === '/archive') return <ArchivePage onLogout={logout} />
+  if (route === '/account') return <AccountPage onLogout={logout} />
   return <ProfilePage onLogout={logout} />
 }
 

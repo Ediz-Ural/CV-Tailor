@@ -28,6 +28,9 @@ content_language = postgresql.ENUM(
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # pool_items.embedding needs pgvector. The compose stack seeds it through an
+    # initdb script, but a plain Postgres instance would fail without this.
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     pool_item_source.create(bind, checkfirst=True)
     pool_item_type.create(bind, checkfirst=True)
     content_language.create(bind, checkfirst=True)

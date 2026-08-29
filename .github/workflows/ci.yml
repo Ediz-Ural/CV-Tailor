@@ -11,6 +11,30 @@ jobs:
     defaults:
       run:
         working-directory: backend
+
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: cv_tailor
+          POSTGRES_PASSWORD: cv_tailor_ci
+          POSTGRES_DB: cv_tailor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cv_tailor -d cv_tailor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg://cv_tailor:cv_tailor_ci@localhost:5432/cv_tailor_test
+      JWT_SECRET: ci-only-secret-value-not-used-anywhere
+      LLM_PROVIDER: mock
+      EMBEDDING_MODEL: mock
+      RENDER_OUTPUT_DIR: /tmp/cv-tailor/generated_cvs
+      LOG_FORMAT: text
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +49,9 @@ jobs:
 
       - name: Install backend dependencies
         run: uv sync --locked
+
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
 
       - name: Run backend tests
         run: uv run pytest -q -p no:cacheprovider

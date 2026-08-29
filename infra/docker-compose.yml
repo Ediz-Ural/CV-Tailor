@@ -1,0 +1,64 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cv_tailor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv_tailor_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-cv_tailor}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./initdb/01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://cv_tailor:cv_tailor_dev@db:5432/cv_tailor}
+      JWT_SECRET: ${JWT_SECRET:-development-only-change-me}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-large}
+      FASTEMBED_CACHE_PATH: ${FASTEMBED_CACHE_PATH:-/var/cache/fastembed}
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      GITHUB_OAUTH_REDIRECT_URI: ${GITHUB_OAUTH_REDIRECT_URI:-http://localhost:8000/github/oauth/callback}
+      GITHUB_TOKEN_ENCRYPTION_KEY: ${GITHUB_TOKEN_ENCRYPTION_KEY:-}
+      GITHUB_API_TIMEOUT_SECONDS: ${GITHUB_API_TIMEOUT_SECONDS:-20}
+      TYPST_BINARY: ${TYPST_BINARY:-typst}
+      TYPST_RENDER_TIMEOUT_SECONDS: ${TYPST_RENDER_TIMEOUT_SECONDS:-5}
+      RENDER_OUTPUT_DIR: ${RENDER_OUTPUT_DIR:-storage/generated_cvs}
+    volumes:
+      - fastembed_cache:/var/cache/fastembed
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ../frontend
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  fastembed_cache:
+    name: cv-tailor-fastembed-cache

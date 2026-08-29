@@ -1,0 +1,1 @@
+"""CV-Tailor backend application."""

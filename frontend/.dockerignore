@@ -1,0 +1,4 @@
+node_modules/
+dist/
+.vite-ip*.log
+npm-debug.log*

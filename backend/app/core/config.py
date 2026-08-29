@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "postgresql+psycopg://cv_tailor:cv_tailor_dev@localhost:5432/cv_tailor"
+    frontend_base_url: str = "http://localhost:5173"
+    cors_allow_origins: str = "http://localhost:5173,http://localhost:8080"
     jwt_secret: str = Field(default="development-only-change-me", min_length=16)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
@@ -34,6 +36,10 @@ class Settings(BaseSettings):
     render_output_dir: str = "storage/generated_cvs"
     log_level: str = "INFO"
     log_format: str = "json"
+
+    @property
+    def cors_allow_origin_list(self) -> list[str]:
+        return [origin.strip().rstrip("/") for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
 
 @lru_cache

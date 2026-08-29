@@ -97,6 +97,14 @@ export const api = {
       body: JSON.stringify(body),
     })
   },
+  patch<T>(path: string, body: unknown, init?: RequestInit) {
+    return request<T>(path, {
+      ...init,
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      body: JSON.stringify(body),
+    })
+  },
   form<T>(path: string, body: FormData, init?: RequestInit) {
     return request<T>(path, {
       ...init,

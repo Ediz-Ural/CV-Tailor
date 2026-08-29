@@ -15,6 +15,7 @@ import {
   Library,
   Loader2,
   LogOut,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -476,8 +477,32 @@ function SourceBadge({ source }: { source: PoolSource }) {
   return <span className={`rounded-md border px-2 py-1 font-mono text-[11px] ${tone}`}>{t(`labels.${source}`)}</span>
 }
 
-function PoolItemRow({ item }: { item: PoolItem }) {
+function PoolItemRow({ item, onSave, onDelete }: { item: PoolItem; onSave?: (id: string, changes: Partial<PoolItem>) => Promise<void>; onDelete?: (id: string) => Promise<void> }) {
   const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState({ title: item.title ?? '', rawContent: item.raw_content, tags: item.tags.join(', '), technologies: item.technologies.join(', ') })
+
+  function startEditing() {
+    setDraft({ title: item.title ?? '', rawContent: item.raw_content, tags: item.tags.join(', '), technologies: item.technologies.join(', ') })
+    setEditing(true)
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    if (!onSave) return
+    setBusy(true)
+    try {
+      await onSave(item.id, { title: draft.title.trim() || null, raw_content: draft.rawContent, tags: splitList(draft.tags), technologies: splitList(draft.technologies) })
+      setEditing(false)
+    } finally { setBusy(false) }
+  }
+
+  async function remove() {
+    if (!onDelete || !window.confirm(t('pool.deleteConfirm'))) return
+    setBusy(true)
+    try { await onDelete(item.id) } finally { setBusy(false) }
+  }
 
   return <article className="rounded-lg border bg-card/80 p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -489,13 +514,28 @@ function PoolItemRow({ item }: { item: PoolItem }) {
         </div>
         <h3 className="mt-3 truncate text-base font-semibold">{item.title || t('common.title')}</h3>
       </div>
-      <span className="font-mono text-[11px] text-muted-foreground">{item.language} / vec:{item.embedding_dimensions}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[11px] text-muted-foreground">{item.language} / vec:{item.embedding_dimensions}</span>
+        {onSave && !editing && <button aria-label={t('pool.edit')} className="grid size-8 place-items-center rounded-lg border text-muted-foreground hover:bg-secondary disabled:opacity-50" disabled={busy} onClick={startEditing} title={t('pool.edit')} type="button"><Pencil className="size-3.5" /></button>}
+        {onDelete && !editing && <button aria-label={t('pool.delete')} className="grid size-8 place-items-center rounded-lg border border-danger/30 text-danger hover:bg-danger/10 disabled:opacity-50" disabled={busy} onClick={() => void remove()} title={t('pool.delete')} type="button"><Trash2 className="size-3.5" /></button>}
+      </div>
     </div>
-    <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">{item.raw_content}</p>
-    <div className="mt-4 flex flex-wrap gap-2">
-      {item.technologies.map((tech) => <span className="rounded-md border bg-background px-2 py-1 font-mono text-[11px] text-foreground" key={`tech-${item.id}-${tech}`}>{tech}</span>)}
-      {item.tags.map((tag) => <span className="rounded-md border bg-secondary px-2 py-1 font-mono text-[11px] text-muted-foreground" key={`tag-${item.id}-${tag}`}>#{tag}</span>)}
-    </div>
+    {editing ? <form className="mt-4 space-y-3" onSubmit={save}>
+      <Field label={t('common.title')} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} value={draft.title} />
+      <label className="block text-sm font-medium">{t('common.content')}<textarea className="mt-2 min-h-28 w-full rounded-lg border bg-background p-3 text-sm" onChange={(event) => setDraft((current) => ({ ...current, rawContent: event.target.value }))} required value={draft.rawContent} /></label>
+      <Field label={t('pool.tags')} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))} value={draft.tags} />
+      <Field label={t('pool.technologies')} onChange={(event) => setDraft((current) => ({ ...current, technologies: event.target.value }))} value={draft.technologies} />
+      <div className="flex gap-2">
+        <button className="flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={busy} type="submit">{busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{t('pool.saveItem')}</button>
+        <button className="h-9 rounded-lg border px-4 text-sm text-muted-foreground hover:bg-secondary" onClick={() => setEditing(false)} type="button">{t('pool.cancel')}</button>
+      </div>
+    </form> : <>
+      <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">{item.raw_content}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {item.technologies.map((tech) => <span className="rounded-md border bg-background px-2 py-1 font-mono text-[11px] text-foreground" key={`tech-${item.id}-${tech}`}>{tech}</span>)}
+        {item.tags.map((tag) => <span className="rounded-md border bg-secondary px-2 py-1 font-mono text-[11px] text-muted-foreground" key={`tag-${item.id}-${tag}`}>#{tag}</span>)}
+      </div>
+    </>}
   </article>
 }
 
@@ -631,6 +671,26 @@ function PoolPage({ onLogout }: { onLogout: () => void }) {
     } catch (caught) { setError(errorMessage(caught)) } finally { setApprovalBusyId(null) }
   }
 
+  async function saveItem(id: string, changes: Partial<PoolItem>) {
+    setError(''); setMessage('')
+    try {
+      const updated = await api.patch<PoolItem>(`/pool-items/${id}`, changes)
+      setItems((current) => current.map((item) => item.id === id ? updated : item))
+      setPendingItems((current) => current.filter((item) => item.id !== id))
+      setMessage(t('pool.updated'))
+    } catch (caught) { setError(errorMessage(caught)) }
+  }
+
+  async function deleteItem(id: string) {
+    setError(''); setMessage('')
+    try {
+      await api.delete(`/pool-items/${id}`)
+      setItems((current) => current.filter((item) => item.id !== id))
+      setPendingItems((current) => current.filter((item) => item.id !== id))
+      setMessage(t('pool.deleted'))
+    } catch (caught) { setError(errorMessage(caught)) }
+  }
+
   async function startGithubOAuth() {
     setError(''); setMessage('')
     setSyncLines((current) => ['github.oauth start requested', ...current.slice(0, 4)])
@@ -686,7 +746,7 @@ function PoolPage({ onLogout }: { onLogout: () => void }) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground"><Filter className="size-4" />{t('pool.filterLabel')} <span className="text-foreground">{filter === 'all' ? t('common.all') : t(`labels.${filter}`)}</span></div>
             <button className="flex h-9 items-center gap-2 rounded-lg border px-3 text-sm text-muted-foreground hover:bg-secondary" onClick={() => void refresh()} type="button"><RefreshCw className="size-4" />{t('common.refresh')}</button>
           </div>
-          {loading ? <p className="rounded-lg border bg-card/80 p-5 text-sm text-muted-foreground">{t('pool.loading')}</p> : visibleItems.length === 0 ? <div className="rounded-lg border bg-card/80 p-8 text-center"><CircleDot className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">{t('pool.empty')}</p></div> : <div className="grid gap-3 lg:grid-cols-2">{visibleItems.map((item) => <PoolItemRow item={item} key={item.id} />)}</div>}
+          {loading ? <p className="rounded-lg border bg-card/80 p-5 text-sm text-muted-foreground">{t('pool.loading')}</p> : visibleItems.length === 0 ? <div className="rounded-lg border bg-card/80 p-8 text-center"><CircleDot className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">{t('pool.empty')}</p></div> : <div className="grid gap-3 lg:grid-cols-2">{visibleItems.map((item) => <PoolItemRow item={item} key={item.id} onDelete={deleteItem} onSave={saveItem} />)}</div>}
         </section>
 
         <aside className="space-y-5">

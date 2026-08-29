@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     github_oauth_redirect_uri: str = "http://localhost:8000/github/oauth/callback"
     github_token_encryption_key: str | None = None
     github_api_timeout_seconds: float = Field(default=20.0, gt=0)
+    # A run whose worker died is never going to advance; after this long an
+    # unfinished run is reported as failed instead of polling forever.
+    pipeline_stale_after_seconds: int = Field(default=900, gt=0)
     typst_binary: str = "typst"
     typst_render_timeout_seconds: float = Field(default=5.0, gt=0)
     render_output_dir: str = "storage/generated_cvs"

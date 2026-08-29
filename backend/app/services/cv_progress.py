@@ -1,15 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import RLock
 from time import perf_counter
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.db.session import SessionLocal
+from app.models.pipeline_run import PipelineRun
 
 CV_GRAPH_STEPS = ["job_parser", "selector", "cvtailor", "evaluator", "typst_renderer"]
+# How many recent finished runs the step-duration aggregate looks at.
+METRICS_SAMPLE_SIZE = 500
 
 
 class CVStepProgress(BaseModel):
@@ -41,12 +47,19 @@ class CVGenerationProgress(BaseModel):
     duration_ms: float | None = None
 
 
-@dataclass
 class CVProgressStore:
-    _items: dict[UUID, CVGenerationProgress] = field(default_factory=dict)
-    _started_monotonic: dict[UUID, float] = field(default_factory=dict)
-    _step_started_monotonic: dict[tuple[UUID, str], float] = field(default_factory=dict)
-    _lock: RLock = field(default_factory=RLock)
+    """Pipeline progress, persisted so a restart or a second worker can read it.
+
+    The pipeline itself runs in a FastAPI background task, so the process that
+    started a run is not necessarily the one that serves the status poll. Only
+    the monotonic clocks used for duration measurement stay in memory; if a run
+    is resumed elsewhere the durations are simply reported as unknown.
+    """
+
+    def __init__(self) -> None:
+        self._started_monotonic: dict[UUID, float] = {}
+        self._step_started_monotonic: dict[tuple[UUID, str], float] = {}
+        self._lock = RLock()
 
     def create(self, user_id: UUID) -> CVGenerationProgress:
         progress = CVGenerationProgress(
@@ -55,34 +68,64 @@ class CVProgressStore:
             status="queued",
             steps=[CVStepProgress(name=name) for name in CV_GRAPH_STEPS],
         )
-        with self._lock:
-            self._items[progress.pipeline_id] = progress
+        with SessionLocal() as db:
+            db.add(
+                PipelineRun(
+                    id=progress.pipeline_id,
+                    user_id=user_id,
+                    status=progress.status,
+                    state=progress.model_dump(mode="json"),
+                )
+            )
+            db.commit()
         return progress
 
     def get(self, pipeline_id: UUID, user_id: UUID) -> CVGenerationProgress | None:
-        with self._lock:
-            progress = self._items.get(pipeline_id)
-            if progress is None or progress.user_id != user_id:
+        with SessionLocal() as db:
+            run = self._load(db, pipeline_id)
+            if run is None or run.user_id != user_id:
                 return None
-            return progress.model_copy(deep=True)
+
+            progress = CVGenerationProgress.model_validate(run.state)
+            if self._is_stale(run):
+                progress.status = "failed"
+                progress.current_step = None
+                progress.error = "Pipeline yaniti alinamadi, calisma yarida kesildi."
+                progress.completed_at = datetime.now(UTC)
+                self._save(db, run, progress)
+            return progress
+
+    def _is_stale(self, run: PipelineRun) -> bool:
+        if run.status not in ("queued", "running"):
+            return False
+        updated_at = run.updated_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        return datetime.now(UTC) - updated_at > timedelta(seconds=settings.pipeline_stale_after_seconds)
 
     def mark_step_started(self, pipeline_id: UUID, step: str) -> None:
         now = datetime.now(UTC)
-        with self._lock:
-            progress = self._items.get(pipeline_id)
-            if progress is None:
+        with SessionLocal() as db:
+            run = self._load(db, pipeline_id)
+            if run is None:
                 return
+            progress = CVGenerationProgress.model_validate(run.state)
+
             if progress.started_at is None:
                 progress.started_at = now
-                self._started_monotonic[pipeline_id] = perf_counter()
+                with self._lock:
+                    self._started_monotonic[pipeline_id] = perf_counter()
             progress.status = "running"
             progress.current_step = step
-            self._step_started_monotonic[(pipeline_id, step)] = perf_counter()
+            with self._lock:
+                self._step_started_monotonic[(pipeline_id, step)] = perf_counter()
             for item in progress.steps:
                 if item.name == step:
                     item.status = "running"
                     item.started_at = item.started_at or now
                     break
+
+            self._save(db, run, progress)
 
     def mark_step_completed(self, pipeline_id: UUID, step: str, **values: object) -> None:
         duration_ms = self._step_duration_ms(pipeline_id, step)
@@ -104,27 +147,48 @@ class CVProgressStore:
         self._update(pipeline_id, status="failed", error=error, completed_at=datetime.now(UTC), duration_ms=duration_ms)
 
     def metrics(self) -> dict[str, object]:
-        with self._lock:
-            statuses: dict[str, int] = {}
-            step_durations: dict[str, list[float]] = {step: [] for step in CV_GRAPH_STEPS}
-            for progress in self._items.values():
-                statuses[progress.status] = statuses.get(progress.status, 0) + 1
-                for step in progress.steps:
-                    if step.duration_ms is not None:
-                        step_durations.setdefault(step.name, []).append(step.duration_ms)
+        step_durations: dict[str, list[float]] = {step: [] for step in CV_GRAPH_STEPS}
+        statuses: dict[str, int] = {}
 
-            return {
-                "pipelines_total": len(self._items),
-                "pipelines_by_status": statuses,
-                "step_duration_ms": {
-                    name: {
-                        "count": len(values),
-                        "avg": round(sum(values) / len(values), 2) if values else None,
-                        "max": round(max(values), 2) if values else None,
-                    }
-                    for name, values in step_durations.items()
-                },
-            }
+        with SessionLocal() as db:
+            for status, count in db.execute(
+                select(PipelineRun.status, func.count()).group_by(PipelineRun.status)
+            ):
+                statuses[status] = count
+
+            # Only finished runs carry step durations worth aggregating, and the
+            # recent ones are what a metrics scrape is actually about.
+            for (state,) in db.execute(
+                select(PipelineRun.state)
+                .where(PipelineRun.status.in_(("completed", "failed")))
+                .order_by(PipelineRun.updated_at.desc())
+                .limit(METRICS_SAMPLE_SIZE)
+            ):
+                for step in state.get("steps", []):
+                    duration = step.get("duration_ms")
+                    if duration is not None:
+                        step_durations.setdefault(step["name"], []).append(duration)
+
+        return {
+            "pipelines_total": sum(statuses.values()),
+            "pipelines_by_status": statuses,
+            "step_duration_ms": {
+                name: {
+                    "count": len(values),
+                    "avg": round(sum(values) / len(values), 2) if values else None,
+                    "max": round(max(values), 2) if values else None,
+                }
+                for name, values in step_durations.items()
+            },
+        }
+
+    def _load(self, db: Session, pipeline_id: UUID) -> PipelineRun | None:
+        return db.scalar(select(PipelineRun).where(PipelineRun.id == pipeline_id))
+
+    def _save(self, db: Session, run: PipelineRun, progress: CVGenerationProgress) -> None:
+        run.status = progress.status
+        run.state = progress.model_dump(mode="json")
+        db.commit()
 
     def _update(
         self,
@@ -134,10 +198,12 @@ class CVProgressStore:
         step_duration_ms: float | None = None,
         **values: object,
     ) -> None:
-        with self._lock:
-            progress = self._items.get(pipeline_id)
-            if progress is None:
+        with SessionLocal() as db:
+            run = self._load(db, pipeline_id)
+            if run is None:
                 return
+            progress = CVGenerationProgress.model_validate(run.state)
+
             if step_status is not None:
                 step_name, status = step_status
                 for step in progress.steps:
@@ -149,6 +215,8 @@ class CVProgressStore:
                         break
             for key, value in values.items():
                 setattr(progress, key, value)
+
+            self._save(db, run, progress)
 
     def _step_duration_ms(self, pipeline_id: UUID, step: str) -> float | None:
         with self._lock:

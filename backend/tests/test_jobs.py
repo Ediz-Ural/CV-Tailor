@@ -76,6 +76,7 @@ def test_job_text_input_detects_tr_and_stores_structured_requirements() -> None:
     assert created["raw_text"] == text
     assert created["detected_language"] == "tr"
     assert created["parsed_requirements_json"] == {
+        "summary": "",
         "required_skills": ["Python", "FastAPI"],
         "preferred_skills": ["PostgreSQL"],
         "years_experience": 3,

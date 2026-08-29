@@ -13,6 +13,7 @@ def test_schema_contains_all_application_tables() -> None:
         "jobs",
         "generated_cvs",
         "github_connections",
+        "pipeline_runs",
     }
 
 

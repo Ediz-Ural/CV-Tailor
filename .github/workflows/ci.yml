@@ -30,7 +30,9 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://cv_tailor:cv_tailor_ci@localhost:5432/cv_tailor_test
       JWT_SECRET: ci-only-secret-value-not-used-anywhere
-      LLM_PROVIDER: mock
+      # Tests inject their own LLM fakes; forcing the mock provider here would
+      # override the provider under test. The embedding model stays mocked so CI
+      # never downloads a multi-gigabyte encoder.
       EMBEDDING_MODEL: mock
       RENDER_OUTPUT_DIR: /tmp/cv-tailor/generated_cvs
       LOG_FORMAT: text

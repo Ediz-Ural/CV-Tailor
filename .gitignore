@@ -22,3 +22,8 @@ dist/
 Thumbs.db
 Desktop.ini
 
+
+# Playwright
+/frontend/playwright-report/
+/frontend/test-results/
+/frontend/blob-report/

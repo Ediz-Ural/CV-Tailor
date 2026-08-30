@@ -2,6 +2,20 @@
 
 CV-Tailor, verdiğiniz bir iş ilanına göre profil havuzunuzdaki en uygun deneyim, proje ve yetkinlikleri seçip ilana özel bir CV üreten, çok kullanıcılı bir web uygulamasıdır. Havuz PDF, GitHub ve manuel girdilerden beslenir; seçilen bilgiler **uydurma eklenmeden** ilana göre yeniden ifade edilir ve Typst ile PDF olarak sunulur.
 
+## Ekranlar
+
+| Profil havuzu | İlan → CV |
+|---|---|
+| ![Profil havuzu](docs/screenshots/02-pool.png) | ![Pipeline çalışırken](docs/screenshots/03-pipeline-running.png) |
+
+Pipeline tamamlandığında ATS skoru, önce/sonra farkı, seçilen havuz öğeleri ve PDF önizlemesi aynı ekranda açılır:
+
+![CV sonucu](docs/screenshots/04-result.png)
+
+| CV arşivi | Hesap ve API anahtarı |
+|---|---|
+| ![Arşiv](docs/screenshots/05-archive.png) | ![Hesap](docs/screenshots/06-account.png) |
+
 ## Nasıl çalışır
 
 İki LangGraph akışı var:

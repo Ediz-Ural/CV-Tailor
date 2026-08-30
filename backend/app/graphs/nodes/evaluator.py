@@ -190,7 +190,18 @@ def evaluate_tailored_cv(job: Job, tailored_cv: TailoredCVContent | None, source
         )
         for category, keyword in _requirement_terms(job)
     ]
-    missing_keywords = [match.keyword for match in keyword_matches if not match.matched]
+    # A term listed under both required and preferred skills produced the same
+    # keyword twice, and the UI rendered it twice.
+    missing_keywords: list[str] = []
+    seen_missing: set[str] = set()
+    for match in keyword_matches:
+        if match.matched:
+            continue
+        key = normalize_text(match.keyword)
+        if key in seen_missing:
+            continue
+        seen_missing.add(key)
+        missing_keywords.append(match.keyword)
     ats_score = _score_matches(keyword_matches)
     return ATSEvaluation(
         ats_score=ats_score,

@@ -1,12 +1,14 @@
 from collections.abc import Generator
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.graphs.nodes.cvtailor import TailoredCVContent, TailoredCVItem
-from app.graphs.nodes.evaluator import evaluator_node, semantic_keyword_lemmas
+from app.graphs.nodes.evaluator import evaluate_tailored_cv, evaluator_node, semantic_keyword_lemmas
 from app.graphs.nodes.selector import SelectedPoolItem
 from app.models.enums import ContentLanguage, PoolItemSource, PoolItemType
 from app.models.job import Job
@@ -232,3 +234,22 @@ async def test_evaluator_matches_turkish_root_variants_without_exact_string() ->
         assert evaluation.missing_keywords == []
         assert "gelistirici" not in tailored.experience[0].content.casefold()
         assert semantic_keyword_lemmas("geli\u015ftirici") & semantic_keyword_lemmas("geli\u015ftiren")
+
+
+def test_missing_keywords_are_not_repeated() -> None:
+    # The same term often appears under both required and preferred skills.
+    job = Job(
+        id=uuid4(),
+        user_id=uuid4(),
+        raw_text="Backend role.",
+        detected_language=ContentLanguage.EN,
+        parsed_requirements_json={
+            "required_skills": ["Kafka"],
+            "preferred_skills": ["Kafka"],
+            "key_terms": ["kafka"],
+        },
+    )
+
+    evaluation = evaluate_tailored_cv(job, None, [])
+
+    assert evaluation.missing_keywords == ["Kafka"]

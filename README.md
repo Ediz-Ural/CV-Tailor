@@ -1,6 +1,25 @@
 # CV-Tailor
 
-CV-Tailor, kullanıcının verdiği bir iş ilanına göre profil havuzundaki en uygun deneyim, proje ve yetkinlikleri seçerek ilana özel CV üreten çok kullanıcılı bir web uygulamasıdır. Profil havuzu PDF, GitHub ve manuel girdilerden beslenir; seçilen bilgiler uydurma eklenmeden ilana göre yeniden ifade edilir ve PDF olarak sunulur.
+CV-Tailor, verdiğiniz bir iş ilanına göre profil havuzunuzdaki en uygun deneyim, proje ve yetkinlikleri seçip ilana özel bir CV üreten, çok kullanıcılı bir web uygulamasıdır. Havuz PDF, GitHub ve manuel girdilerden beslenir; seçilen bilgiler **uydurma eklenmeden** ilana göre yeniden ifade edilir ve Typst ile PDF olarak sunulur.
+
+## Nasıl çalışır
+
+İki LangGraph akışı var:
+
+**Havuz akışı** — Yüklediğiniz CV'nin PDF'i ve bağladığınız GitHub deposu ayrıştırılır, adaylar çıkarılır ve **onayınıza** sunulur. Onaylamadığınız hiçbir madde CV üretiminde kullanılmaz.
+
+**Üretim akışı** — `JobParser` ilanı yapılandırılmış gereksinimlere çevirir → `Selector` havuzdan pgvector benzerliğiyle aday çeker ve sıralar → `CVTailor` seçilenleri ilana göre yeniden ifade eder → `Evaluator` ATS uyum skoru, eksik anahtar kelimeler ve önce/sonra farkını üretir → `TypstRenderer` PDF'i basar. Arayüz adımları canlı takip eder.
+
+## Öne çıkanlar
+
+- **Kendi API anahtarınız.** Üretim kendi sağlayıcı hesabınızdan faturalandırılır; anahtar şifreli saklanır, hiçbir yanıtta geri dönmez.
+- **Uydurma yok.** Model yalnızca onayladığınız havuz maddelerini yeniden ifade eder.
+- **TR/EN arayüz** ve çok kiracılı veri izolasyonu.
+- **KVKK**: açık rıza akışı, aydınlatma metni ve tek tuşla kalıcı hesap silme.
+
+## Teknolojiler
+
+FastAPI · LangGraph · PostgreSQL + pgvector · SQLAlchemy + Alembic · Typst · React 19 + Vite + Tailwind · Docker Compose · pytest · Vitest · Playwright
 
 ## Yerel Geliştirme
 
@@ -72,12 +91,21 @@ Bilinmesi gerekenler:
 ## Testler
 
 ```powershell
+# backend (gerçek PostgreSQL'e karşı)
 cd backend
 uv run pytest
 
+# frontend birim testleri
 cd frontend
 npm test
+
+# uçtan uca (çalışan bir backend gerektirir)
+cd frontend
+npx playwright install chromium
+npm run test:e2e
 ```
+
+Uçtan uca testler üretim build'ini gerçek bir API ve veritabanına karşı sürer; hiçbiri LLM sağlayıcısına gitmez, yani ücretli anahtar gerekmez.
 
 Backend testleri gerçek bir PostgreSQL'e bağlanır ve tablolardaki kayıtları siler. Bu yüzden yalnızca adı `_test` veya `_ci` ile biten bir veritabanına karşı çalışırlar:
 
@@ -127,3 +155,23 @@ Production stack ayaktayken:
 5. Dönen `pipeline_id` için `GET /api/cv-generation/{pipeline_id}` çağırın.
 6. `status=completed`, `generated_cv_id`, `ats_score` ve adım `duration_ms` alanlarını doğrulayın.
 7. PDF için `GET /api/generated-cvs/{generated_cv_id}/download` çağırın.
+
+## Depo yapısı
+
+```
+backend/    FastAPI uygulaması, LangGraph akışları, Alembic migration'ları, pytest
+frontend/   React + Vite arayüzü, Vitest birim testleri, Playwright e2e
+infra/      Docker Compose (geliştirme ve üretim) ve veritabanı başlangıç betikleri
+docs/       Veri saklama ve güvenlik politikası, iş paketi dokümanları
+prompts/    Projenin ajan destekli geliştirme akışında kullanılan iş paketi promptları
+logs/       Her iş paketi için üretilen uygulama günlükleri
+state/      İş paketi durum tablosu
+```
+
+`prompts/`, `logs/` ve `state/` dizinleri uygulamanın çalışması için gerekli değildir; projenin nasıl geliştirildiğinin kaydıdır.
+
+## Katkı ve lisans
+
+Sorun bildirimi ve pull request'ler açıktır. Değişiklik göndermeden önce `npm run lint`, `npm test` ve `uv run pytest` komutlarının geçtiğinden emin olun; CI aynı üçünü ve uçtan uca testleri çalıştırır.
+
+MIT lisansı altındadır, bkz. [LICENSE](LICENSE).

@@ -27,3 +27,8 @@ Desktop.ini
 /frontend/playwright-report/
 /frontend/test-results/
 /frontend/blob-report/
+
+# dev.ps1 tarafindan indirilen/uretilen yerel dosyalar
+/.tools/
+/.cache/
+/backend/storage/

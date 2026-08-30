@@ -50,16 +50,57 @@ Bu davranış üç ayarla yönetilir — `SELECTOR_CANDIDATE_LIMIT` (vektör ara
 
 FastAPI · LangGraph · PostgreSQL + pgvector · SQLAlchemy + Alembic · Typst · React 19 + Vite + Tailwind · Docker Compose · pytest · Vitest · Playwright
 
-## Yerel Geliştirme
+## Kurulum
 
-Her iki yolda da önce ortam dosyasını hazırlayın:
+### Tek komut
+
+Windows'ta gereken tek şey Docker Desktop'ın çalışıyor ve [Node.js](https://nodejs.org/)'un kurulu olmasıdır. Gerisini script halleder:
+
+```powershell
+.\dev.ps1
+```
+
+Sırayla şunlar olur: `.env` yoksa `.env.example`'dan üretilir ve `JWT_SECRET` ile şifreleme anahtarları rastgele basılır → PostgreSQL Docker'da kaldırılır → eksikse `uv` ve Typst indirilir → bağımlılıklar kurulur → migration'lar çalışır → backend `:8000` ve arayüz `:5173` ayrı pencerelerde açılır → ikisi de sağlıklı yanıt verince tarayıcı açılır.
+
+```
+[1/6] .env hazirlaniyor... olusturuldu
+[2/6] PostgreSQL (docker) baslatiliyor... hazir
+[3/6] Backend bagimliliklari (uv sync)... tamam
+[4/6] Migration'lar (alembic upgrade head)... tamam
+[5/6] Backend :8000 ... ok
+[6/6] Frontend :5173 ... ok
+```
+
+Açılan ekranda **Kayıt ol** ile hesap açın; giriş için başka bir hazırlık gerekmez. CV üretmek istediğinizde **Hesap** ekranından kendi LLM API anahtarınızı girersiniz — üretim sizin sağlayıcı hesabınızdan faturalandırılır.
+
+| Bayrak | Ne yapar |
+|---|---|
+| `.\dev.ps1` | Kurar ve başlatır |
+| `.\dev.ps1 -SkipInstall` | `uv sync` / `npm install` adımlarını atlar, daha hızlı yeniden başlatır |
+| `.\dev.ps1 -NoBrowser` | Tarayıcıyı açmaz |
+| `.\dev.ps1 -Stop` | Backend, arayüz ve veritabanını durdurur |
+
+Script'in sessizce hallettiği dört şey:
+
+- **`.env`'iniz ezilmez.** Yalnızca hâlâ örnek değerde ya da boş olan alanlar doldurulur; kendi girdiğiniz hiçbir değere dokunulmaz.
+- **Veritabanı adresi.** `.env`'deki `DATABASE_URL` Compose için `db` host'unu gösterir. Yerelde çalışan backend aynı veritabanına `localhost` üzerinden bağlanır; bu değer dosyaya yazılmaz, sadece başlatılan sürece ortam değişkeni olarak geçer.
+- **Typst.** PATH'te yoksa Windows sürümü `.tools/` altına indirilir ve `TYPST_BINARY` oraya yönlendirilir, yoksa pipeline `typst_renderer` adımında düşer.
+- **Docker'dan sızan `.venv`.** `backend/.venv` Docker içinde üretilmişse Windows'ta çalışmaz ve `uv sync` onu silemez; script böyle bir ortamı tanıyıp temizler.
+
+İlk çalıştırmada beklenecek iki şey var:
+
+- **İlk kurulum birkaç dakika sürer** (Python bağımlılıkları, `npm install`, Typst indirmesi).
+- **Havuza eklenen ilk öğe yaklaşık 1,5 dakika sürer.** `EMBEDDING_MODEL` ilk kullanımda indirilir (yaklaşık 2 GB); sonraki istekler anında döner. Ekran donmuş gibi görünebilir, beklemek yeterlidir.
+
+### Elle kurulum
+
+Script'i kullanmıyorsanız (ya da Windows'ta değilseniz) önce ortam dosyasını hazırlayın:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-`JWT_SECRET` alanını doldurun. `JWT_SECRET`'i mutlaka değiştirin —
-`.env.example`'daki değer herkese açıktır ve onunla herhangi bir hesap için token üretilebilir:
+`JWT_SECRET`'i mutlaka değiştirin — `.env.example`'daki değer herkese açıktır ve onunla herhangi bir hesap için token üretilebilir:
 
 ```powershell
 python -c "import secrets; print(secrets.token_urlsafe(48))"
@@ -71,7 +112,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### Yol 1 — Tüm stack Docker'da
+#### Yol 1 — Tüm stack Docker'da
 
 ```powershell
 docker compose --env-file .env -f infra/docker-compose.yml --profile app up --build
@@ -79,20 +120,15 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile app up --bu
 
 `--env-file .env` şart: Compose `.env` dosyasını compose dosyasının bulunduğu dizine (`infra/`) göre arar, kök dizindeki `.env` bu bayrak olmadan sessizce yok sayılır ve `LLM_API_KEY` boş kalır.
 
-Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır. Arayüz kendi nginx'i üzerinden `/api` yolunu backend'e proxy'ler.
-
-İlk çalıştırmada beklenecek iki şey var:
-
-- **İlk build birkaç dakika sürer.** Backend imajı Typst'i indirir, frontend imajı `npm ci` çalıştırır.
-- **Havuza eklenen ilk öğe yaklaşık 1,5 dakika sürer.** `EMBEDDING_MODEL` ilk kullanımda indirilir (yaklaşık 2 GB) ve `fastembed_cache` volume'üne yazılır; sonraki istekler anında döner. Ekran donmuş gibi görünebilir, beklemek yeterlidir.
+Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır. Arayüz kendi nginx'i üzerinden `/api` yolunu backend'e proxy'ler. İlk build birkaç dakika sürer: backend imajı Typst'i indirir, frontend imajı `npm ci` çalıştırır.
 
 CV üretimi bir LLM sağlayıcı anahtarı gerektirir, **ama bu anahtar `.env`'e konmaz**: her kullanıcı kendi anahtarını uygulamadaki **Hesap** ekranından girer ve üretim o kullanıcının kendi sağlayıcı hesabından faturalandırılır. Anahtar kaydedilirken sağlayıcıya karşı doğrulanır, şifreli saklanır ve bir daha geri gösterilmez.
 
 Tek kişilik bir kurulumda sunucunun `LLM_API_KEY` değerini paylaşmak isterseniz `ALLOW_SHARED_LLM_KEY=1` yapabilirsiniz; birden fazla hesabı olan bir kurulumda bunu açmayın, çünkü her kullanıcı sizin anahtarınızı harcar.
 
-### Yol 2 — Veritabanı Docker'da, uygulama yerelde
+#### Yol 2 — Veritabanı Docker'da, uygulama yerelde
 
-Arayüzde anlık yenileme (HMR) isteyen geliştirme akışı budur.
+`.\dev.ps1`'in otomatikleştirdiği akış budur; elle şöyle yürür:
 
 ```powershell
 docker compose --env-file .env -f infra/docker-compose.yml up -d db
@@ -112,8 +148,10 @@ Arayüz `http://localhost:5173` üzerinde açılır ve Vite'ın proxy'si `/api` 
 
 Bilinmesi gerekenler:
 
+- **`DATABASE_URL`'i yerele çevirin.** `.env`'deki değer Compose ağı içindeki `db` host'unu gösterir; yerelde çalışan backend için `localhost` olmalıdır.
 - **Sanal ortam paylaşılamaz.** `backend/.venv` sürüm kontrolüne girmez; Docker içinde üretilmiş bir venv Windows'ta çalışmaz. Yerelde her zaman `uv sync` ile kendi ortamınızı kurun.
 - **PDF üretimi Typst ikilisine ihtiyaç duyar.** Backend'i Docker dışında çalıştırıyorsanız [Typst](https://github.com/typst/typst) kurulu olmalı ve `TYPST_BINARY` onu göstermelidir; aksi hâlde pipeline `typst_renderer` adımında düşer. Docker imajı Typst'i kendisi kurar.
+- **`RENDER_OUTPUT_DIR` ve `FASTEMBED_CACHE_PATH`** `.env`'de Docker içi yolları (`/app/storage/...`, `/var/cache/fastembed`) gösterir; yerelde çalışırken var olan bir dizine çevirin.
 - **Tarayıcıdan gelen çağrılar için origin izni gerekir.** API'yi `/api` proxy'si olmadan doğrudan çağıracaksanız origin'i `CORS_ALLOW_ORIGINS` listesine ekleyin.
 - **GitHub OAuth dönüşü.** `GITHUB_OAUTH_REDIRECT_URI` backend'in callback adresini, `FRONTEND_BASE_URL` ise kullanıcının geri gönderileceği arayüz adresini gösterir.
 
@@ -188,6 +226,7 @@ Production stack ayaktayken:
 ## Depo yapısı
 
 ```
+dev.ps1     Tüm geliştirme ortamını tek komutla kuran ve başlatan script
 backend/    FastAPI uygulaması, LangGraph akışları, Alembic migration'ları, pytest
 frontend/   React + Vite arayüzü, Vitest birim testleri, Playwright e2e
 infra/      Docker Compose (geliştirme ve üretim) ve veritabanı başlangıç betikleri

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.job import Job
 from app.models.pool_item import PoolItem
 from app.services.embeddings import EmbeddingService
@@ -177,10 +178,16 @@ def _selection_prompt(job: Job, candidates: list[SelectorCandidate], selection_l
             }
         )
     return (
-        "Rank the most relevant verified pool items for this job. "
-        "Use semantic relevance, not exact keyword matching. Language differences must not disqualify an item. "
-        "Return at most "
-        f"{selection_limit} items, with scores from 0 to 1.\n\n"
+        "Select the verified pool items that genuinely support this job application. "
+        "Use semantic relevance, not exact keyword matching. Language differences must not disqualify an item.\n"
+        "Score each selected item from 0 to 1 for how well it supports this specific role: "
+        "1.0 is direct evidence for a core requirement, 0.5 is transferable but not on point, "
+        "below 0.5 is a different field. An item that demonstrates one of the required or "
+        "preferred skills scores at least 0.6 even when its subject matter differs, because "
+        "the skill itself is what the posting asks for.\n"
+        f"Return at most {selection_limit} items, and fewer whenever fewer are relevant. "
+        "Leave out anything from another field: a short, on-point list is better than a padded one. "
+        "Returning two strong items is a better answer than five where three are filler.\n\n"
         f"Job language: {job.detected_language.value}\n"
         f"Job requirements JSON: {requirements}\n"
         f"Candidates: {candidate_lines}"
@@ -193,30 +200,46 @@ async def rerank_candidates_with_llm(
     candidates: list[SelectorCandidate],
     *,
     selection_limit: int = 5,
+    min_relevance: float | None = None,
 ) -> list[SelectedPoolItem]:
     if not candidates:
         return []
+
+    min_relevance = settings.selector_min_relevance if min_relevance is None else min_relevance
 
     ranking = await llm_service.structured(
         _selection_prompt(job, candidates, selection_limit),
         SelectorRanking,
         system_prompt=(
             "You are the Selector node for CV-Tailor. Select only from candidate IDs. "
-            "Prefer factual relevance to the job requirements. Do not require matching language."
+            "Prefer factual relevance to the job requirements. Do not require matching language. "
+            "Never pad the list to reach the limit: omit anything that belongs to a different field."
         ),
     )
     candidate_scores = {candidate.pool_item_id: candidate.semantic_score for candidate in candidates}
-    selected = []
+    selected: list[SelectedPoolItem] = []
+    rejected: list[SelectedPoolItem] = []
     for item in ranking.selected_items:
-        if item.pool_item_id in candidate_scores:
-            selected.append(
-                SelectedPoolItem(
-                    pool_item_id=item.pool_item_id,
-                    score=max(0.0, min(1.0, (item.score + candidate_scores[item.pool_item_id]) / 2)),
-                )
-            )
+        if item.pool_item_id not in candidate_scores:
+            continue
+        entry = SelectedPoolItem(
+            pool_item_id=item.pool_item_id,
+            score=max(0.0, min(1.0, (item.score + candidate_scores[item.pool_item_id]) / 2)),
+        )
+        # Threshold on the model's own relevance judgement rather than the blended
+        # score: embedding similarity sits high for everything in one person's
+        # portfolio, so blending would wash the decision out.
+        if item.score < min_relevance:
+            rejected.append(entry)
+            continue
+        selected.append(entry)
         if len(selected) >= selection_limit:
             break
+
+    # An empty CV helps nobody. If the pool genuinely has nothing for this role,
+    # keep the single best item and let the ATS score say so.
+    if not selected and rejected:
+        return rejected[:1]
     return selected
 
 
@@ -227,8 +250,8 @@ async def selector_node(state: SelectorState) -> dict[str, object]:
     if job is None:
         return {"semantic_candidates": [], "selected_pool_items": []}
 
-    candidate_limit = state.get("candidate_limit", 12)
-    selection_limit = state.get("selection_limit", 5)
+    candidate_limit = state.get("candidate_limit", settings.selector_candidate_limit)
+    selection_limit = state.get("selection_limit", settings.selector_selection_limit)
     candidates = semantic_candidates_for_job(
         db,
         user_id,

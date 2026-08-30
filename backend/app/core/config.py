@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     # Each run makes several provider calls and holds a database session, so
     # the number in flight is capped rather than growing with demand.
     pipeline_max_concurrent: int = Field(default=4, gt=0)
+    # Minimum relevance the selector demands before putting a pool item on the
+    # CV. Without a floor the model fills the slot count with whatever is left.
+    selector_min_relevance: float = Field(default=0.45, ge=0.0, le=1.0)
+    # How many pool items the vector search hands to the selector. Anything
+    # beyond this never reaches the ranking step, so a large portfolio needs a
+    # larger window.
+    selector_candidate_limit: int = Field(default=12, gt=0)
+    # Upper bound on how many items land on the CV. Fewer are used whenever
+    # fewer are relevant.
+    selector_selection_limit: int = Field(default=5, gt=0)
     typst_binary: str = "typst"
     typst_render_timeout_seconds: float = Field(default=5.0, gt=0)
     render_output_dir: str = "storage/generated_cvs"

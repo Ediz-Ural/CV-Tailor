@@ -22,7 +22,22 @@ Pipeline tamamlandığında ATS skoru, önce/sonra farkı, seçilen havuz öğel
 
 **Havuz akışı** — Yüklediğiniz CV'nin PDF'i ve bağladığınız GitHub deposu ayrıştırılır, adaylar çıkarılır ve **onayınıza** sunulur. Onaylamadığınız hiçbir madde CV üretiminde kullanılmaz.
 
-**Üretim akışı** — `JobParser` ilanı yapılandırılmış gereksinimlere çevirir → `Selector` havuzdan pgvector benzerliğiyle aday çeker ve sıralar → `CVTailor` seçilenleri ilana göre yeniden ifade eder → `Evaluator` ATS uyum skoru, eksik anahtar kelimeler ve önce/sonra farkını üretir → `TypstRenderer` PDF'i basar. Arayüz adımları canlı takip eder.
+**Üretim akışı** — `JobParser` ilanı yapılandırılmış gereksinimlere çevirir → `Selector` havuzdan pgvector benzerliğiyle aday çeker ve ilana uygun olanları seçer → `CVTailor` seçilenleri ilana göre yeniden ifade eder → `Evaluator` ATS uyum skoru, eksik anahtar kelimeler ve önce/sonra farkını üretir → `TypstRenderer` PDF'i basar. Arayüz adımları canlı takip eder.
+
+### Seçim nasıl davranıyor
+
+Havuzunuz her alandan projeyi barındırabilir; CV'ye yalnızca ilana uyanlar girer. Beş alana yayılmış 15 projelik bir havuzla ölçüldü:
+
+| İlan | CV'ye giren projeler |
+|---|---|
+| AI Engineer | 2 yapay zekâ projesi |
+| Frontend Engineer | 3 frontend projesi |
+| DevOps / SRE | 3 altyapı projesi |
+| Mobile Engineer | 3 mobil projesi |
+
+Dört ilanın hiçbirinde başka alandan proje CV'ye girmedi. Seçim listesi bir üst sınırdır, kota değil: ilana uyan üç proje varsa CV'de üç proje olur.
+
+Bu davranış üç ayarla yönetilir — `SELECTOR_CANDIDATE_LIMIT` (vektör aramasının sıralamaya ilettiği aday sayısı; büyük bir portföyde yükseltin), `SELECTOR_SELECTION_LIMIT` (bir CV'deki en fazla proje sayısı) ve `SELECTOR_MIN_RELEVANCE` (bir projenin CV'ye girmesi için gereken alaka eşiği; düşürürseniz sınırdaki işler de girer, yükseltirseniz CV daralır).
 
 ## Öne çıkanlar
 

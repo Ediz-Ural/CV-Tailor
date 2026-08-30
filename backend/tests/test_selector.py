@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import delete
@@ -9,7 +9,9 @@ from app.core.config import EMBEDDING_DIMENSION
 from app.db.session import SessionLocal
 from app.graphs.nodes.selector import (
     SelectedPoolItem,
+    SelectorCandidate,
     SelectorRanking,
+    rerank_candidates_with_llm,
     selector_node,
     turkish_light_lemmas,
 )
@@ -251,3 +253,84 @@ async def test_selector_returns_empty_for_missing_or_other_users_job() -> None:
         )
 
         assert state == {"semantic_candidates": [], "selected_pool_items": []}
+
+
+class RankingLLM:
+    def __init__(self, ranking: SelectorRanking) -> None:
+        self.ranking = ranking
+
+    async def structured(self, prompt: str, response_model, *, system_prompt: str | None = None):
+        assert response_model is SelectorRanking
+        self.prompt = prompt
+        return self.ranking
+
+
+def _candidate(score: float) -> SelectorCandidate:
+    return SelectorCandidate(
+        pool_item_id=uuid4(),
+        semantic_score=score,
+        title="Project",
+        language="en",
+        technologies=[],
+        tags=[],
+        raw_content="Some work.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_off_field_items_are_dropped_instead_of_filling_the_slots() -> None:
+    """The limit is a cap, not a quota.
+
+    With a portfolio spanning several fields the model happily returned five
+    items for every posting, so an AI role came back with frontend projects
+    attached.
+    """
+    relevant = [_candidate(0.9), _candidate(0.88)]
+    filler = [_candidate(0.86), _candidate(0.85), _candidate(0.84)]
+    llm = RankingLLM(
+        SelectorRanking(
+            selected_items=[
+                SelectedPoolItem(pool_item_id=relevant[0].pool_item_id, score=0.95),
+                SelectedPoolItem(pool_item_id=relevant[1].pool_item_id, score=0.80),
+                SelectedPoolItem(pool_item_id=filler[0].pool_item_id, score=0.20),
+                SelectedPoolItem(pool_item_id=filler[1].pool_item_id, score=0.15),
+                SelectedPoolItem(pool_item_id=filler[2].pool_item_id, score=0.10),
+            ]
+        )
+    )
+
+    selected = await rerank_candidates_with_llm(
+        llm, _selector_job(), [*relevant, *filler], selection_limit=5, min_relevance=0.45
+    )
+
+    assert [item.pool_item_id for item in selected] == [c.pool_item_id for c in relevant]
+
+
+@pytest.mark.asyncio
+async def test_the_best_item_is_kept_when_nothing_clears_the_floor() -> None:
+    # An empty CV helps nobody; the ATS score is what reports the poor fit.
+    candidates = [_candidate(0.7), _candidate(0.6)]
+    llm = RankingLLM(
+        SelectorRanking(
+            selected_items=[
+                SelectedPoolItem(pool_item_id=candidates[0].pool_item_id, score=0.20),
+                SelectedPoolItem(pool_item_id=candidates[1].pool_item_id, score=0.10),
+            ]
+        )
+    )
+
+    selected = await rerank_candidates_with_llm(
+        llm, _selector_job(), candidates, selection_limit=5, min_relevance=0.45
+    )
+
+    assert [item.pool_item_id for item in selected] == [candidates[0].pool_item_id]
+
+
+def _selector_job() -> Job:
+    return Job(
+        id=uuid4(),
+        user_id=uuid4(),
+        raw_text="AI Engineer role.",
+        detected_language=ContentLanguage.EN,
+        parsed_requirements_json={"required_skills": ["Python"], "preferred_skills": [], "key_terms": []},
+    )

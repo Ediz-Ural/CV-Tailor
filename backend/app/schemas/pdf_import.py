@@ -29,7 +29,7 @@ class PDFExtractedItem(BaseModel):
     def normalize_raw_content(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("raw_content bos olamaz")
+            raise ValueError("raw_content boş olamaz")
         return normalized
 
     @field_validator("tags", "technologies")

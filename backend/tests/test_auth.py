@@ -81,8 +81,8 @@ def test_kvkk_notice_is_public_and_contains_explicit_consent_text() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["version"] == "2026-06-21"
-    assert "acik riza" in payload["explicit_consent_text"]
-    assert any(section["title"] == "Isleme amaclari" for section in payload["sections"])
+    assert "açık rıza" in payload["explicit_consent_text"]
+    assert any(section["title"] == "İşleme amaçları" for section in payload["sections"])
 
 
 def test_invalid_token_is_rejected() -> None:

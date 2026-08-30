@@ -1,8 +1,11 @@
+import i18n from '@/i18n'
 import { ApiError, api } from '@/lib/api'
 import type { GithubCallback, Job } from '@/types'
 
 export function errorMessage(error: unknown) {
-  return error instanceof ApiError ? error.detail : 'Beklenmeyen bir hata olustu.'
+  // The fallback goes through i18n so an English session does not get a
+  // Turkish sentence back from a network failure.
+  return error instanceof ApiError ? error.detail : i18n.t('common.unexpectedError')
 }
 
 export async function downloadBlob(path: string, filename: string) {

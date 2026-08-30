@@ -43,7 +43,7 @@ def enqueue_generated_cv_render(
 ) -> GeneratedCV:
     job = db.scalar(tenant.apply(select(Job).where(Job.id == payload.job_id), Job))
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ilan bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="İlan bulunamadı")
 
     profile = db.scalar(tenant.apply(select(Profile), Profile))
     typst_source = build_typst_source(
@@ -90,11 +90,11 @@ def list_generated_cvs(
 def download_generated_cv(generated_cv_id: UUID, db: DbSession, tenant: Tenant) -> FileResponse:
     generated_cv = db.scalar(tenant.apply(select(GeneratedCV).where(GeneratedCV.id == generated_cv_id), GeneratedCV))
     if generated_cv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV bulunamadı")
     if not generated_cv.pdf_path:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF henuz hazir degil")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF henüz hazır değil")
 
     pdf_path = Path(generated_cv.pdf_path)
     if not pdf_path.exists() or not pdf_path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF dosyasi bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF dosyası bulunamadı")
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"{generated_cv.id}.pdf")

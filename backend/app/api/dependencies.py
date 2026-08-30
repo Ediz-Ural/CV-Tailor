@@ -21,7 +21,7 @@ def get_current_user(
 ) -> User:
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Gecersiz veya eksik kimlik bilgisi",
+        detail="Geçersiz veya eksik kimlik bilgisi",
         headers={"WWW-Authenticate": "Bearer"},
     )
     if credentials is None or credentials.scheme.lower() != "bearer":

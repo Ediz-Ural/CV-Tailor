@@ -70,7 +70,7 @@ describe('account screen', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    const keyInput = (await screen.findByLabelText(/API anahtari|API key/i)) as HTMLInputElement
+    const keyInput = (await screen.findByLabelText(/API anahtar[ıi]|API key/i)) as HTMLInputElement
 
     // The key must never be a plain-text field on screen.
     expect(keyInput.type).toBe('password')
@@ -95,6 +95,6 @@ describe('account screen', () => {
     fireEvent.submit(form as HTMLFormElement)
 
     await waitFor(() => expect(screen.getByText(/9999/)).toBeInTheDocument())
-    expect((screen.getByLabelText(/API anahtari|API key/i) as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText(/API anahtar[ıi]|API key/i) as HTMLInputElement).value).toBe('')
   })
 })

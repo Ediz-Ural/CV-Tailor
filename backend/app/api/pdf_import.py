@@ -39,11 +39,11 @@ def validate_pdf_upload(file: UploadFile, data: bytes) -> None:
     filename = file.filename or ""
     content_type = (file.content_type or "").lower()
     if content_type != "application/pdf" or not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Yalnizca PDF dosyasi yuklenebilir")
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Yalnızca PDF dosyası yüklenebilir")
     if not data:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF dosyasi bos")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF dosyası boş")
     if len(data) > settings.pdf_import_max_bytes:
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="PDF dosyasi boyut limitini asiyor")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="PDF dosyası boyut limitini aşıyor")
 
 
 def build_pdf_extraction_prompt(text: str) -> str:
@@ -159,10 +159,10 @@ async def import_pdf_to_pool(
             system_prompt="You extract structured, factual profile data and CV pool items from PDF CV text.",
         )
     except LLMError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="LLM structured cikarim basarisiz") from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="LLM structured çıkarım başarısız") from exc
 
     if not extraction.items:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF icinden havuz ogesi cikarilamadi")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF içinden havuz öğesi çıkarılamadı")
 
     pool_items = create_unverified_pool_items(
         current_user.id,
@@ -180,7 +180,7 @@ async def import_pdf_to_pool(
         embedding_service,
     )
     if not pool_items:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF icinden havuz ogesi cikarilamadi")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF içinden havuz öğesi çıkarılamadı")
     profile = upsert_profile_from_pdf(db, current_user.id, extraction.profile)
     db.add_all(pool_items)
     db.commit()

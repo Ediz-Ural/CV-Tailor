@@ -24,7 +24,7 @@ def register(payload: RegisterRequest, db: DbSession) -> User:
     if not payload.kvkk_consent:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Kayit icin KVKK acik rizasi zorunludur",
+            detail="Kayıt için KVKK açık rızası zorunludur",
         )
 
     user = User(
@@ -39,7 +39,7 @@ def register(payload: RegisterRequest, db: DbSession) -> User:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Bu email adresi zaten kayitli",
+            detail="Bu e-posta adresi zaten kayıtlı",
         ) from None
     db.refresh(user)
     return user
@@ -51,7 +51,7 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email veya parola hatali",
+            detail="E-posta veya parola hatalı",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return TokenResponse(access_token=create_access_token(user.id))

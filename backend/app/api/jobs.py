@@ -38,7 +38,7 @@ FetchClient = Annotated[httpx.AsyncClient, Depends(get_job_fetch_client)]
 def get_own_job(job_id: UUID, db: Session, tenant: Tenant) -> Job:
     job = db.scalar(tenant.apply(select(Job).where(Job.id == job_id), Job))
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ilan bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="İlan bulunamadı")
     return job
 
 
@@ -62,7 +62,7 @@ async def create_job(
     try:
         language, requirements = await JobParser(llm_service).parse(raw_text)
     except LLMError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Ilan parse edilemedi") from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="İlan parse edilemedi") from exc
 
     job = Job(
         user_id=current_user.id,

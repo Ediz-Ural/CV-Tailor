@@ -38,7 +38,7 @@ PoolGraphSchedulerDependency = Annotated[PoolGraphScheduler, Depends(get_pool_gr
 def get_own_profile(db: Session, tenant: Tenant) -> Profile:
     profile = db.scalar(tenant.apply(select(Profile), Profile))
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profil bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profil bulunamadı")
     return profile
 
 
@@ -123,10 +123,10 @@ async def queue_profile_pool_refresh(
     if file is not None:
         filename = file.filename or ""
         if (file.content_type or "").lower() != "application/pdf" or not filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Yalnizca PDF dosyasi yuklenebilir")
+            raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Yalnızca PDF dosyası yüklenebilir")
         pdf_bytes = await file.read()
         if not pdf_bytes:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF dosyasi bos")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="PDF dosyası boş")
 
     pool_graph_scheduler(background_tasks, current_user.id, pdf_bytes, include_github)
     return PoolGraphTriggerResponse(queued=True, include_github=include_github, has_pdf=pdf_bytes is not None)

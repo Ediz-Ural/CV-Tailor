@@ -1,5 +1,6 @@
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '')
 
+import i18n from '@/i18n'
 import { clearAccessToken, getAccessToken } from '@/lib/auth'
 
 export const UNAUTHORIZED_EVENT = 'cv-tailor:unauthorized'
@@ -26,7 +27,7 @@ function readErrorDetail(payload: unknown, status: number) {
         .join(', ')
     }
   }
-  return `API istegi ${status} durumuyla basarisiz oldu`
+  return i18n.t('error.apiFailed', { status })
 }
 
 function handleUnauthorized(status: number, hadToken: boolean) {

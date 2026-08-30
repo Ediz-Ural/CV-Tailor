@@ -42,7 +42,7 @@ GitHubSyncSchedulerDependency = Annotated[GitHubSyncScheduler, Depends(get_githu
 @router.post("/oauth/start", response_model=GitHubOAuthStartResponse)
 def start_github_oauth(current_user: CurrentUser) -> GitHubOAuthStartResponse:
     if not settings.github_oauth_client_id:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="GitHub OAuth yapilandirilmamis")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="GitHub OAuth yapılandırılmamış")
     state = create_github_oauth_state(current_user.id)
     query = urlencode(
         {

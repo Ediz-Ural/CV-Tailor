@@ -23,8 +23,11 @@ test('capture the workspace screens', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel(/e-?posta|email/i).fill(email as string)
   await page.getByLabel(/parola|password/i).fill(password)
+  // The shell fades in, so a shot taken right after the fill catches a frame
+  // that is still almost black.
+  await page.waitForTimeout(1_500)
   await page.screenshot({ path: `${outDir}/01-login.png` })
-  await page.getByRole('button', { name: /giris yap|sign in|log in/i }).click()
+  await page.getByRole('button', { name: /giri[şs] yap|sign in|log in/i }).click()
   await expect(page).toHaveURL(/\/profile$/)
 
   await page.goto('/pool')
@@ -32,18 +35,21 @@ test('capture the workspace screens', async ({ page }) => {
   await page.screenshot({ path: `${outDir}/02-pool.png`, fullPage: true })
 
   await page.goto('/generate')
-  await page.getByLabel(/ilan metni|job text/i).fill(
+  await page.getByLabel(/[İi]lan metni|job text/i).fill(
     'Senior Backend Engineer. We are looking for an engineer with strong Python and ' +
       'FastAPI experience building REST APIs at scale. You will work with PostgreSQL, ' +
       'Redis and Docker, and deploy to Kubernetes. Nice to have: Kafka, Terraform, AWS.',
   )
-  await page.getByRole('button', { name: /baslat|start/i }).click()
+  await page.getByRole('button', { name: /ba[şs]lat|start/i }).click()
 
   // The pipeline panel mid-run is the screenshot that shows how the tool works.
   await page.waitForTimeout(4_000)
   await page.screenshot({ path: `${outDir}/03-pipeline-running.png` })
 
-  await expect(page.getByText(/ATS/i).first()).toBeVisible({ timeout: 240_000 })
+  // Waiting for the text "ATS" matches the placeholder panel too, which says the
+  // score will appear once the pipeline finishes - so the shot used to be taken
+  // mid-run. The download button exists only after the PDF is rendered.
+  await expect(page.getByRole('link', { name: /PDF indir|Download PDF/i })).toBeVisible({ timeout: 240_000 })
   await page.waitForTimeout(6_000)
   await page.screenshot({ path: `${outDir}/04-result.png`, fullPage: true })
 

@@ -26,7 +26,7 @@ EmbeddingDependency = Annotated[EmbeddingService, Depends(get_embedding_service)
 def get_own_pool_item(item_id: UUID, db: Session, tenant: Tenant) -> PoolItem:
     item = db.scalar(tenant.apply(select(PoolItem).where(PoolItem.id == item_id), PoolItem))
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Havuz ogesi bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Havuz öğesi bulunamadı")
     return item
 
 

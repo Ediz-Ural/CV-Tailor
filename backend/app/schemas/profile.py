@@ -17,7 +17,7 @@ class ProfileFields(BaseModel):
     def normalize_full_name(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("full_name bos olamaz")
+            raise ValueError("full_name boş olamaz")
         return normalized
 
 
@@ -42,7 +42,7 @@ class ProfilePatch(BaseModel):
             return None
         normalized = value.strip()
         if not normalized:
-            raise ValueError("full_name bos olamaz")
+            raise ValueError("full_name boş olamaz")
         return normalized
 
 

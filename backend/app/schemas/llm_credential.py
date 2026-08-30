@@ -14,7 +14,7 @@ class LLMCredentialUpsert(BaseModel):
     def strip_value(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("deger bos olamaz")
+            raise ValueError("değer boş olamaz")
         return normalized
 
 

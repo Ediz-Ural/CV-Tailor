@@ -74,8 +74,8 @@ def build_llm_config(db: Session, user_id: UUID, config: Settings = settings) ->
         return config
 
     raise LLMCredentialMissing(
-        "Bu hesap icin bir LLM API anahtari kayitli degil. Hesap ekranindan kendi "
-        "anahtarinizi ekleyin."
+        "Bu hesap için bir LLM API anahtarı kayıtlı değil. Hesap ekranından kendi "
+        "anahtarınızı ekleyin."
     )
 
 

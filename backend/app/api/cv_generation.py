@@ -187,12 +187,12 @@ def start_cv_generation(
     if mine >= 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Zaten calisan bir CV uretimi var. Bitmesini bekleyin.",
+            detail="Zaten çalışan bir CV üretimi var. Bitmesini bekleyin.",
         )
     if total >= settings.pipeline_max_concurrent:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Sunucu su anda kapasitede. Birazdan tekrar deneyin.",
+            detail="Sunucu şu anda kapasitede. Birazdan tekrar deneyin.",
         )
 
     progress = cv_progress_store.create(current_user.id)
@@ -216,5 +216,5 @@ def start_cv_generation(
 def read_cv_generation_status(pipeline_id: UUID, current_user: CurrentUser) -> CVGenerationStatusResponse:
     progress = cv_progress_store.get(pipeline_id, current_user.id)
     if progress is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline bulunamadi")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline bulunamadı")
     return CVGenerationStatusResponse.model_validate(progress.model_dump())

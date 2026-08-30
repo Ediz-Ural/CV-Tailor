@@ -18,7 +18,7 @@ class GitHubRepoAnalysis(BaseModel):
     def normalize_text(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("deger bos olamaz")
+            raise ValueError("değer boş olamaz")
         return normalized
 
     @field_validator("technologies")

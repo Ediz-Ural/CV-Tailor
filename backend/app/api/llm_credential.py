@@ -34,7 +34,7 @@ VerificationService = Annotated[LLMService, Depends(get_verification_service)]
 def read_llm_credential(db: DbSession, current_user: CurrentUser) -> LLMCredential:
     credential = read_credential(db, current_user.id)
     if credential is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayitli bir API anahtari yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıtlı bir API anahtarı yok")
     return credential
 
 
@@ -65,5 +65,5 @@ async def upsert_llm_credential(
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def remove_llm_credential(db: DbSession, current_user: CurrentUser) -> Response:
     if not delete_credential(db, current_user.id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayitli bir API anahtari yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıtlı bir API anahtarı yok")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

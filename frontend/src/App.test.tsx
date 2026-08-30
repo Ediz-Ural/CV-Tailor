@@ -87,7 +87,7 @@ describe('pool screen', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: /duzenle|edit/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /d[üu]zenle|edit/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sil|delete/i })).toBeInTheDocument()
   })
 })

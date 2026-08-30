@@ -45,6 +45,10 @@ def _progress_values_from_state(state: dict[str, Any]) -> dict[str, Any]:
     selected_items = state.get("selected_pool_items") or []
     values["selected_pool_item_ids"] = [item.pool_item_id for item in selected_items if hasattr(item, "pool_item_id")]
 
+    fell_back = state.get("tailoring_fell_back")
+    if fell_back is not None:
+        values["tailoring_fell_back"] = bool(fell_back)
+
     output_language = state.get("output_language")
     if output_language is not None:
         values["output_language"] = getattr(output_language, "value", str(output_language))

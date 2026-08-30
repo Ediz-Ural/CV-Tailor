@@ -41,6 +41,9 @@ class CVGenerationProgress(BaseModel):
     missing_keywords: list[str] = Field(default_factory=list)
     ats_recommendations: list[str] = Field(default_factory=list)
     before_after_diff: list[dict[str, object]] = Field(default_factory=list)
+    # True when CVTailor could not tailor and the CV is the verified source
+    # text copied as-is. The run still succeeds, so this is the only signal.
+    tailoring_fell_back: bool = False
     error: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None

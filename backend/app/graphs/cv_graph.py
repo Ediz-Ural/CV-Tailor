@@ -32,6 +32,7 @@ class CVGraphState(TypedDict, total=False):
     job_id: UUID
     db: Session
     llm_service: LLMService
+    tailoring_fell_back: bool
     embedding_service: EmbeddingService
     http_client: httpx.AsyncClient
     render_enqueue: Callable[[UUID], None]

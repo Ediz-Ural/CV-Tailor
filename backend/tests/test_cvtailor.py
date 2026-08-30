@@ -1,10 +1,20 @@
 from collections.abc import Generator
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.graphs.nodes.cvtailor import TailoredCVContent, TailoredCVItem, cvtailor_node
+from app.graphs.nodes.cvtailor import (
+    CVTailorFabricationError,
+    TailoredCVContent,
+    TailoredCVDraft,
+    TailoredCVDraftItem,
+    TailoredCVItem,
+    cvtailor_node,
+    validate_no_fabrication,
+)
 from app.graphs.nodes.selector import SelectedPoolItem
 from app.models.enums import ContentLanguage, PoolItemSource, PoolItemType
 from app.models.job import Job
@@ -15,23 +25,23 @@ from app.db.session import SessionLocal
 
 
 class FakeCVTailorLLM:
-    def __init__(self, content: TailoredCVContent) -> None:
-        self.content = content
+    def __init__(self, draft: TailoredCVDraft) -> None:
+        self.draft = draft
         self.prompts: list[str] = []
         self.system_prompts: list[str] = []
 
     async def structured(
         self,
         prompt: str,
-        response_model: type[TailoredCVContent],
+        response_model: type[TailoredCVDraft],
         *,
         system_prompt: str | None = None,
-    ) -> TailoredCVContent:
-        assert response_model is TailoredCVContent
+    ) -> TailoredCVDraft:
+        assert response_model is TailoredCVDraft
         assert system_prompt is not None
         self.prompts.append(prompt)
         self.system_prompts.append(system_prompt)
-        return self.content
+        return self.draft
 
 
 @pytest.fixture(autouse=True)
@@ -122,12 +132,12 @@ async def test_cvtailor_outputs_english_for_english_job_and_preserves_technical_
         db.commit()
 
         llm = FakeCVTailorLLM(
-            TailoredCVContent(
+            TailoredCVDraft(
                 output_language=ContentLanguage.EN,
                 summary="Backend engineer with FastAPI and machine learning project experience.",
                 projects=[
-                    TailoredCVItem(
-                        source_pool_item_id=item.id,
+                    TailoredCVDraftItem(
+                        source_index=1,
                         title="Backend API",
                         content="Built FastAPI services and machine learning inference endpoints for API workloads.",
                         technologies=["FastAPI", "machine learning"],
@@ -176,12 +186,12 @@ async def test_cvtailor_outputs_turkish_for_turkish_job_with_untranslated_techni
         db.commit()
 
         llm = FakeCVTailorLLM(
-            TailoredCVContent(
+            TailoredCVDraft(
                 output_language=ContentLanguage.TR,
                 summary="FastAPI odakli backend API gelistirme deneyimi.",
                 experience=[
-                    TailoredCVItem(
-                        source_pool_item_id=item.id,
+                    TailoredCVDraftItem(
+                        source_index=1,
                         title="API Gelistirme",
                         content="FastAPI ile backend API gelistirme deneyimini ilana uygun sekilde one cikardi.",
                         technologies=["FastAPI"],
@@ -229,12 +239,12 @@ async def test_cvtailor_blocks_unsupported_job_skill_and_falls_back_to_source_on
         db.commit()
 
         llm = FakeCVTailorLLM(
-            TailoredCVContent(
+            TailoredCVDraft(
                 output_language=ContentLanguage.EN,
                 summary="FastAPI and Kubernetes backend experience.",
                 projects=[
-                    TailoredCVItem(
-                        source_pool_item_id=item.id,
+                    TailoredCVDraftItem(
+                        source_index=1,
                         title="FastAPI service",
                         content="Built FastAPI and Kubernetes services for internal APIs.",
                         technologies=["FastAPI"],
@@ -257,3 +267,132 @@ async def test_cvtailor_blocks_unsupported_job_skill_and_falls_back_to_source_on
         rendered_text = "\n".join([tailored.summary, *[project.content for project in tailored.projects]])
         assert "Kubernetes" not in rendered_text
         assert "Built FastAPI services for internal APIs." in rendered_text
+
+
+def _guard_job(requirements: dict[str, list[str]], raw_text: str) -> Job:
+    return Job(
+        id=uuid4(),
+        user_id=uuid4(),
+        raw_text=raw_text,
+        detected_language=ContentLanguage.EN,
+        parsed_requirements_json=requirements,
+    )
+
+
+def _guard_source(
+    raw_content: str,
+    technologies: list[str],
+    language: ContentLanguage = ContentLanguage.TR,
+) -> PoolItem:
+    return PoolItem(
+        id=uuid4(),
+        user_id=uuid4(),
+        source=PoolItemSource.MANUAL,
+        type=PoolItemType.EXPERIENCE,
+        title="Odeme Platformu",
+        raw_content=raw_content,
+        tags=[],
+        technologies=technologies,
+        language=language,
+        verified_by_user=True,
+    )
+
+
+def test_english_rendering_of_a_turkish_source_is_not_fabrication() -> None:
+    """The guard and the ATS scorer must agree on what "present" means.
+
+    Writing up a Turkish pool item in English is the product's main use case.
+    Comparing raw substrings rejected it as fabrication, and the tailored CV was
+    silently replaced by the untouched source text.
+    """
+    job = _guard_job(
+        {"required_skills": ["REST APIs"], "preferred_skills": [], "key_terms": []},
+        "Senior Backend Engineer building REST APIs.",
+    )
+    source = _guard_source("Gunluk 1.2 milyon istegi tasiyan REST API'leri gelistirdim.", ["FastAPI"])
+    content = TailoredCVContent(
+        output_language=ContentLanguage.EN,
+        summary="Backend engineer building REST APIs at scale.",
+        experience=[
+            TailoredCVItem(
+                source_pool_item_id=source.id,
+                title="Payments Platform",
+                content="Built REST APIs serving 1.2 million requests a day.",
+                technologies=["FastAPI"],
+            )
+        ],
+    )
+
+    validate_no_fabrication(content, job, [source])
+
+
+def test_a_term_absent_from_the_sources_is_still_rejected() -> None:
+    """Same language on both sides, so a missing term really is an invention."""
+    job = _guard_job(
+        {"required_skills": ["React"], "preferred_skills": [], "key_terms": []},
+        "Senior Frontend Engineer.",
+    )
+    source = _guard_source("Built services with Python and FastAPI.", ["FastAPI"], ContentLanguage.EN)
+    content = TailoredCVContent(
+        output_language=ContentLanguage.EN,
+        summary="Frontend engineer working with React.",
+        experience=[
+            TailoredCVItem(
+                source_pool_item_id=source.id,
+                title="Payments Platform",
+                content="Built interfaces with React.",
+                technologies=["FastAPI"],
+            )
+        ],
+    )
+
+    with pytest.raises(CVTailorFabricationError, match="React"):
+        validate_no_fabrication(content, job, [source])
+
+
+def test_cross_language_write_up_is_not_policed_by_the_term_check() -> None:
+    """Across languages the check cannot separate translation from invention.
+
+    "servis" never matches "service", so enforcing it rejected honest work and
+    the fallback replaced the tailored CV with the untouched source text.
+    Invented tools remain blocked by the technologies check.
+    """
+    job = _guard_job(
+        {"required_skills": ["service reliability"], "preferred_skills": [], "key_terms": []},
+        "Senior Backend Engineer who will own service reliability.",
+    )
+    source = _guard_source("Odeme servislerini calistirdim.", ["FastAPI"], ContentLanguage.TR)
+    content = TailoredCVContent(
+        output_language=ContentLanguage.EN,
+        summary="Backend engineer who owned service reliability.",
+        experience=[
+            TailoredCVItem(
+                source_pool_item_id=source.id,
+                title="Payments Platform",
+                content="Ran payment services and owned service reliability.",
+                technologies=["FastAPI"],
+            )
+        ],
+    )
+
+    validate_no_fabrication(content, job, [source])
+
+
+def test_invented_tools_are_blocked_even_across_languages() -> None:
+    job = _guard_job({"required_skills": [], "preferred_skills": [], "key_terms": []}, "Any job.")
+    source = _guard_source("Odeme servislerini calistirdim.", ["FastAPI"], ContentLanguage.TR)
+    content = TailoredCVContent(
+        output_language=ContentLanguage.EN,
+        summary="Backend engineer.",
+        experience=[
+            TailoredCVItem(
+                source_pool_item_id=source.id,
+                title="Payments Platform",
+                content="Ran payment services.",
+                technologies=["FastAPI", "Kubernetes"],
+            )
+        ],
+    )
+
+    with pytest.raises(CVTailorFabricationError, match="kubernetes"):
+        validate_no_fabrication(content, job, [source])

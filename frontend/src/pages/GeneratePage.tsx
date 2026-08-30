@@ -116,6 +116,7 @@ export function GeneratePage({ onLogout }: { onLogout: () => void }) {
               <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t('generate.showcasePendingDescription')}</p>
             </div>
           </div> : <>
+            {status.tailoring_fell_back && <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">{t('generate.notTailored')}</p>}
             <ScoreShowcase score={status.ats_score} />
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="space-y-3">

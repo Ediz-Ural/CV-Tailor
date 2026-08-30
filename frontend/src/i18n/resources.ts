@@ -205,6 +205,7 @@ export const resources = {
         failedTitle: `${TECH_TERMS.pipeline} tamamlanamadi`,
         failedUnknown: 'Beklenmeyen bir hata olustu. Ilan metnini kontrol edip tekrar dene.',
         failedRetry: 'Tekrar dene',
+        notTailored: 'Bu CV ilana gore yeniden ifade edilemedi; dogrulanmis havuz metniniz oldugu gibi kullanildi.',
       },
       labels: {
         experience: 'Deneyim',
@@ -406,6 +407,7 @@ export const resources = {
         failedTitle: `The ${TECH_TERMS.pipeline} did not finish`,
         failedUnknown: 'Something went wrong. Check the job text and try again.',
         failedRetry: 'Try again',
+        notTailored: 'This CV could not be rewritten for the posting; your verified pool text was used as-is.',
       },
       labels: {
         experience: 'Experience',

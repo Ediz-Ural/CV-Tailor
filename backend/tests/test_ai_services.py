@@ -1,4 +1,6 @@
 import json
+import types
+from unittest import mock
 
 import httpx
 import pytest
@@ -217,3 +219,58 @@ async def test_rejected_api_key_error_names_the_setting_to_fix() -> None:
 
     assert "401" in str(caught.value)
     assert "API key saved on your account" in str(caught.value)
+
+
+def test_embedding_model_is_loaded_once_per_process() -> None:
+    # A fresh EmbeddingService is built for every request; without a shared cache
+    # each one reloaded a multi-gigabyte model, which made a single pool item
+    # take about half a minute.
+    from app.services import embeddings as embeddings_module
+
+    loads: list[str] = []
+
+    class FakeTextEmbedding:
+        def __init__(self, model_name: str) -> None:
+            loads.append(model_name)
+
+        def embed(self, texts):
+            return iter([[0.0] * EMBEDDING_DIMENSION])
+
+    embeddings_module._load_text_embedding.cache_clear()
+    try:
+        with mock.patch.dict(
+            "sys.modules",
+            {"fastembed": types.SimpleNamespace(TextEmbedding=FakeTextEmbedding)},
+        ):
+            first = embeddings_module.FastEmbedEncoder("some/model")
+            second = embeddings_module.FastEmbedEncoder("some/model")
+
+        assert loads == ["some/model"]
+        assert first._model is second._model
+    finally:
+        embeddings_module._load_text_embedding.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("term", "text"),
+    [
+        # Sentence punctuation used to stay glued to the token because the
+        # pattern keeps dots for names like next.js.
+        ("React", "We build interfaces with React."),
+        # English plurals have to reach the same lemma as the singular, or an
+        # English write-up of a Turkish source item looks like fabrication.
+        ("REST APIs", "Gunluk 1.2 milyon istegi tasiyan REST API'leri gelistirdim."),
+        ("Kubernetes", "Servisleri Kubernetes uzerinde calistirdim."),
+    ],
+)
+def test_keyword_lemmas_survive_punctuation_and_plurals(term: str, text: str) -> None:
+    from app.services.text_matching import semantic_keyword_lemmas
+
+    assert semantic_keyword_lemmas(term) <= semantic_keyword_lemmas(text)
+
+
+def test_names_with_internal_dots_are_kept_whole() -> None:
+    from app.services.text_matching import semantic_keyword_lemmas
+
+    assert semantic_keyword_lemmas("Next.js") <= semantic_keyword_lemmas("Built the site with Next.js.")
+    assert not semantic_keyword_lemmas("Next.js") <= semantic_keyword_lemmas("Built the site with React.")

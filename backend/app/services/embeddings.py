@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import Literal, Protocol
 
 import httpx
@@ -26,11 +27,23 @@ class EmbeddingError(RuntimeError):
     pass
 
 
+@lru_cache(maxsize=4)
+def _load_text_embedding(model_name: str):
+    """Load a fastembed model once per process.
+
+    Building TextEmbedding reads a multi-gigabyte model into memory. A fresh
+    EmbeddingService is constructed per request, so without this every single
+    call that needs an embedding paid the load cost again - roughly half a
+    minute for one pool item, and over two minutes inside the selector.
+    """
+    from fastembed import TextEmbedding
+
+    return TextEmbedding(model_name=model_name)
+
+
 class FastEmbedEncoder:
     def __init__(self, model_name: str) -> None:
-        from fastembed import TextEmbedding
-
-        self._model = TextEmbedding(model_name=model_name)
+        self._model = _load_text_embedding(model_name)
 
     def encode(self, text: str, *, normalize_embeddings: bool) -> Sequence[float]:
         # FastEmbed's supported retrieval models return normalized embeddings.
@@ -112,13 +125,14 @@ def _fit_embedding_dimension(vector: list[float]) -> list[float]:
     if len(vector) == EMBEDDING_DIMENSION:
         return vector
 
-    # Padding or truncating keeps the column happy while quietly destroying the
-    # geometry the selector depends on, and nothing downstream would ever report
-    # it. A misconfigured model has to fail loudly instead.
+    # Truncating drops real signal, and padding only looks harmless: it keeps
+    # cosine distance intact between two vectors from the same model, so the
+    # mismatch stays invisible until the model is changed and old rows are
+    # silently compared against new ones. Refuse the write instead.
     raise EmbeddingError(
         f"Embedding model produced {len(vector)} dimensions but the pool_items "
         f"column stores {EMBEDDING_DIMENSION}. Set EMBEDDING_MODEL to a model with "
-        f"{EMBEDDING_DIMENSION} dimensions."
+        f"{EMBEDDING_DIMENSION} dimensions; changing it means re-embedding existing pool items."
     )
 
 

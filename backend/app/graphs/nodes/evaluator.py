@@ -1,5 +1,4 @@
 import difflib
-import re
 from typing import TypedDict
 from uuid import UUID
 
@@ -11,6 +10,13 @@ from app.graphs.nodes.cvtailor import TailoredCVContent, TailoredCVItem, load_se
 from app.graphs.nodes.selector import SelectedPoolItem
 from app.models.job import Job
 from app.models.pool_item import PoolItem
+from app.services.text_matching import normalize_text, semantic_keyword_lemmas
+
+_CATEGORY_WEIGHTS = {
+    "required_skills": 0.70,
+    "preferred_skills": 0.20,
+    "key_terms": 0.10,
+}
 
 
 class ATSKeywordMatch(BaseModel):
@@ -46,71 +52,6 @@ class EvaluatorState(TypedDict, total=False):
     missing_keywords: list[str]
     ats_recommendations: list[str]
     before_after_diff: list[BeforeAfterDiff]
-
-
-_TR_TRANSLATION = str.maketrans(
-    {
-        "\u00e7": "c",
-        "\u011f": "g",
-        "\u0131": "i",
-        "\u00f6": "o",
-        "\u015f": "s",
-        "\u00fc": "u",
-        "\u00c7": "c",
-        "\u011e": "g",
-        "\u0130": "i",
-        "\u00d6": "o",
-        "\u015e": "s",
-        "\u00dc": "u",
-    }
-)
-
-_TURKISH_SUFFIXES = (
-    "larinin",
-    "lerinin",
-    "larindan",
-    "lerinden",
-    "lardan",
-    "lerden",
-    "larin",
-    "lerin",
-    "lari",
-    "leri",
-    "ici",
-    "ucu",
-    "ucu",
-    "ci",
-    "cu",
-    "me",
-    "ma",
-    "mek",
-    "mak",
-    "en",
-    "an",
-)
-
-_CATEGORY_WEIGHTS = {
-    "required_skills": 0.70,
-    "preferred_skills": 0.20,
-    "key_terms": 0.10,
-}
-
-
-def normalize_text(text: str) -> str:
-    return text.casefold().translate(_TR_TRANSLATION)
-
-
-def _stem_token(token: str) -> str:
-    stem = token
-    for suffix in _TURKISH_SUFFIXES:
-        if len(stem) > len(suffix) + 3 and stem.endswith(suffix):
-            return stem[: -len(suffix)]
-    return stem
-
-
-def semantic_keyword_lemmas(text: str) -> set[str]:
-    normalized = normalize_text(text)
-    return {_stem_token(word) for word in re.findall(r"[a-z0-9+#.]+", normalized)}
 
 
 def _requirement_terms(job: Job) -> list[tuple[str, str]]:

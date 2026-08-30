@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 
 from app.api import cv_generation as cv_generation_api
 from app.db.session import SessionLocal
-from app.graphs.nodes.cvtailor import TailoredCVContent, TailoredCVItem
+from app.graphs.nodes.cvtailor import TailoredCVDraft, TailoredCVDraftItem
 from app.graphs.nodes.selector import SelectorRanking, SelectedPoolItem
 from app.main import app
 from app.models.enums import ContentLanguage, PoolItemSource, PoolItemType
@@ -48,17 +48,17 @@ class FakeGraphLLMService:
                 item = db.scalar(select(PoolItem).where(PoolItem.title == "Backend Platform"))
                 assert item is not None
                 return SelectorRanking(selected_items=[SelectedPoolItem(pool_item_id=item.id, score=0.96)])
-        if response_model is TailoredCVContent:
+        if response_model is TailoredCVDraft:
             with SessionLocal() as db:
                 item = db.scalar(select(PoolItem).where(PoolItem.title == "Backend Platform"))
                 assert item is not None
-                return TailoredCVContent(
+                return TailoredCVDraft(
                     output_language=ContentLanguage.EN,
                     summary="Backend engineer focused on FastAPI and PostgreSQL services.",
                     experience=[],
                     projects=[
-                        TailoredCVItem(
-                            source_pool_item_id=item.id,
+                        TailoredCVDraftItem(
+                            source_index=1,
                             title="Backend Platform",
                             content="Built REST API services with FastAPI and PostgreSQL.",
                             technologies=["FastAPI", "PostgreSQL"],

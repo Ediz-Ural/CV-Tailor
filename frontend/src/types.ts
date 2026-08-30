@@ -100,6 +100,7 @@ export type CVGenerationStatus = {
   missing_keywords: string[]
   ats_recommendations: string[]
   before_after_diff: BeforeAfterDiff[]
+  tailoring_fell_back: boolean
   error: string | null
 }
 

@@ -47,6 +47,10 @@ class CVGenerationProgress(BaseModel):
     duration_ms: float | None = None
 
 
+class PipelineBusy(RuntimeError):
+    """A new run would exceed the per-user or server-wide limit."""
+
+
 class CVProgressStore:
     """Pipeline progress, persisted so a restart or a second worker can read it.
 
@@ -60,6 +64,20 @@ class CVProgressStore:
         self._started_monotonic: dict[UUID, float] = {}
         self._step_started_monotonic: dict[tuple[UUID, str], float] = {}
         self._lock = RLock()
+
+    def active_counts(self, user_id: UUID) -> tuple[int, int]:
+        """Return (this user's active runs, all active runs)."""
+        active = ("queued", "running")
+        with SessionLocal() as db:
+            mine = db.scalar(
+                select(func.count())
+                .select_from(PipelineRun)
+                .where(PipelineRun.user_id == user_id, PipelineRun.status.in_(active))
+            )
+            total = db.scalar(
+                select(func.count()).select_from(PipelineRun).where(PipelineRun.status.in_(active))
+            )
+        return int(mine or 0), int(total or 0)
 
     def create(self, user_id: UUID) -> CVGenerationProgress:
         progress = CVGenerationProgress(

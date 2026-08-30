@@ -13,7 +13,10 @@ PDF dosyalari ve GitHub OAuth token saklama davranisini tanimlar.
   foreign key ve index bulunur.
 - GitHub OAuth token degeri `github_connections.access_token_encrypted` alaninda
   Fernet ile sifreli saklanir. Sifreleme anahtari sadece ortam degiskeni
-  `GITHUB_TOKEN_ENCRYPTION_KEY` uzerinden gelir.
+  `CREDENTIAL_ENCRYPTION_KEY` (eski ad: `GITHUB_TOKEN_ENCRYPTION_KEY`) uzerinden gelir.
+- Kullanicinin LLM saglayici API anahtari `llm_credentials.api_key_encrypted`
+  alaninda ayni Fernet anahtariyla sifreli saklanir. Anahtarin kendisi hicbir API
+  yanitinda donmez; yalnizca son dort karakteri (`key_hint`) gosterilir.
 - Parolalar `users.hashed_password` alaninda bcrypt hash olarak saklanir; plaintext
   parola veritabanina yazilmaz.
 - JWT imzalama sirri `JWT_SECRET` ortam degiskeninden yonetilir. Uygulama JWT'nin
@@ -23,7 +26,8 @@ PDF dosyalari ve GitHub OAuth token saklama davranisini tanimlar.
 
 - `DELETE /account` akisi yalnizca `confirmation="HESABIMI SIL"` degeriyle calisir.
 - Hesap silindiginde `users` satiri silinir; `ondelete="CASCADE"` ile profil,
-  havuz, ilan, uretilen CV ve GitHub baglanti satirlari kaldirilir.
+  havuz, ilan, uretilen CV, GitHub baglantisi, LLM API anahtari ve pipeline
+  kosu kayitlari kaldirilir.
 - `generated_cvs.pdf_path` ile izlenen PDF dosyalari hesap silme akisi sirasinda
   dosya sisteminden silinir.
 

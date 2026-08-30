@@ -1,3 +1,4 @@
+import logging
 import operator
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,6 +17,7 @@ from app.services.embeddings import EmbeddingService
 from app.services.github import GitHubAPIClient, extract_repository_pool_candidates
 from app.services.item_extractor import ExtractedPoolItem, create_unverified_pool_items
 from app.services.llm import LLMService
+from app.services.llm_credentials import LLMCredentialMissing, load_llm_service
 from app.services.pdf_parser import extract_pdf_text
 
 
@@ -116,6 +118,8 @@ def build_pool_graph():
     return graph.compile()
 
 
+logger = logging.getLogger(__name__)
+
 pool_graph = build_pool_graph()
 
 
@@ -125,11 +129,23 @@ async def run_pool_graph_for_user(
     include_github: bool = True,
 ) -> dict[str, object]:
     with SessionLocal() as db:
+        try:
+            llm_service = load_llm_service(db, user_id)
+        except LLMCredentialMissing:
+            # Both callers schedule this as a background task, so raising here
+            # would only ever reach the logs. Extraction needs the user's own
+            # provider key; without one there is nothing to do.
+            logger.info(
+                "pool_graph_skipped_without_llm_key",
+                extra={"event": "pool_graph_skipped_without_llm_key", "user_id": str(user_id)},
+            )
+            return {"user_id": user_id, "created_items": []}
+
         return await pool_graph.ainvoke(
             {
                 "user_id": user_id,
                 "db": db,
-                "llm_service": LLMService(),
+                "llm_service": llm_service,
                 "embedding_service": EmbeddingService(),
                 "include_github": include_github,
                 "pdf_bytes": pdf_bytes,

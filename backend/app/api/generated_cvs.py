@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -69,15 +69,21 @@ def enqueue_generated_cv_render(
 
 
 @router.get("", response_model=list[GeneratedCVResponse])
-def list_generated_cvs(db: DbSession, tenant: Tenant) -> list[GeneratedCV]:
-    return list(
-        db.scalars(
-            tenant.apply(
-                select(GeneratedCV).order_by(GeneratedCV.created_at.desc(), GeneratedCV.id.desc()),
-                GeneratedCV,
-            )
-        ).all()
+def list_generated_cvs(
+    db: DbSession,
+    tenant: Tenant,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[GeneratedCV]:
+    statement = (
+        tenant.apply(
+            select(GeneratedCV).order_by(GeneratedCV.created_at.desc(), GeneratedCV.id.desc()),
+            GeneratedCV,
+        )
+        .limit(limit)
+        .offset(offset)
     )
+    return list(db.scalars(statement).all())
 
 
 @router.get("/{generated_cv_id}/download")

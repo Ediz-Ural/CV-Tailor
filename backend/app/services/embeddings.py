@@ -111,9 +111,15 @@ def _fit_embedding_dimension(vector: list[float]) -> list[float]:
         raise EmbeddingError("Embedding vector must not be empty")
     if len(vector) == EMBEDDING_DIMENSION:
         return vector
-    if len(vector) > EMBEDDING_DIMENSION:
-        return vector[:EMBEDDING_DIMENSION]
-    return [*vector, *([0.0] * (EMBEDDING_DIMENSION - len(vector)))]
+
+    # Padding or truncating keeps the column happy while quietly destroying the
+    # geometry the selector depends on, and nothing downstream would ever report
+    # it. A misconfigured model has to fail loudly instead.
+    raise EmbeddingError(
+        f"Embedding model produced {len(vector)} dimensions but the pool_items "
+        f"column stores {EMBEDDING_DIMENSION}. Set EMBEDDING_MODEL to a model with "
+        f"{EMBEDDING_DIMENSION} dimensions."
+    )
 
 
 def detect_language(text: str) -> Language:

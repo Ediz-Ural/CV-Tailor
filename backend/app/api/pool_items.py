@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -54,8 +54,18 @@ def create_pool_item(
 
 
 @router.get("", response_model=list[PoolItemResponse])
-def list_pool_items(db: DbSession, tenant: Tenant) -> list[PoolItem]:
-    return list(db.scalars(tenant.apply(select(PoolItem).order_by(PoolItem.created_at, PoolItem.id), PoolItem)))
+def list_pool_items(
+    db: DbSession,
+    tenant: Tenant,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[PoolItem]:
+    statement = (
+        tenant.apply(select(PoolItem).order_by(PoolItem.created_at, PoolItem.id), PoolItem)
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.scalars(statement))
 
 
 @router.get("/{item_id}", response_model=PoolItemResponse)

@@ -14,6 +14,7 @@ def test_schema_contains_all_application_tables() -> None:
         "generated_cvs",
         "github_connections",
         "pipeline_runs",
+        "llm_credentials",
     }
 
 

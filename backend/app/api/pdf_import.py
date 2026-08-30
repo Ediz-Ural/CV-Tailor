@@ -13,6 +13,7 @@ from app.schemas.pdf_import import PDFExtractedItem, PDFExtractedProfile, PDFExt
 from app.services.embeddings import EmbeddingService
 from app.services.item_extractor import ExtractedPoolItem, create_unverified_pool_items
 from app.services.llm import LLMError, LLMService
+from app.services.llm_credentials import LLMCredentialMissing, load_llm_service
 from app.services.pdf_parser import PDFParseError, extract_pdf_text
 
 router = APIRouter(prefix="/pool/import", tags=["pool-import"])
@@ -23,8 +24,11 @@ def get_embedding_service() -> EmbeddingService:
     return EmbeddingService()
 
 
-def get_llm_service() -> LLMService:
-    return LLMService()
+def get_llm_service(current_user: CurrentUser, db: DbSession) -> LLMService:
+    try:
+        return load_llm_service(db, current_user.id)
+    except LLMCredentialMissing as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 EmbeddingDependency = Annotated[EmbeddingService, Depends(get_embedding_service)]

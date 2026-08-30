@@ -10,14 +10,14 @@ Her iki yolda da önce ortam dosyasını hazırlayın:
 Copy-Item .env.example .env
 ```
 
-`JWT_SECRET` ve `LLM_API_KEY` alanlarını doldurun. `JWT_SECRET`'i mutlaka değiştirin —
+`JWT_SECRET` alanını doldurun. `JWT_SECRET`'i mutlaka değiştirin —
 `.env.example`'daki değer herkese açıktır ve onunla herhangi bir hesap için token üretilebilir:
 
 ```powershell
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-`GITHUB_TOKEN_ENCRYPTION_KEY` için bir Fernet anahtarı üretin:
+`CREDENTIAL_ENCRYPTION_KEY` için bir Fernet anahtarı üretin (kullanıcıların GitHub token'larını ve LLM anahtarlarını şifreler):
 
 ```powershell
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -38,7 +38,9 @@ Arayüz `http://localhost:8080`, API `http://localhost:8000` üzerinde açılır
 - **İlk build birkaç dakika sürer.** Backend imajı Typst'i indirir, frontend imajı `npm ci` çalıştırır.
 - **Havuza eklenen ilk öğe yaklaşık 1,5 dakika sürer.** `EMBEDDING_MODEL` ilk kullanımda indirilir (yaklaşık 2 GB) ve `fastembed_cache` volume'üne yazılır; sonraki istekler anında döner. Ekran donmuş gibi görünebilir, beklemek yeterlidir.
 
-CV üretimi gerçek bir `LLM_API_KEY` gerektirir. Anahtar yanlışsa pipeline `failed` olur ve arayüzdeki hata kartında sebebi görünür (`openai rejected the API key (HTTP 401). Check LLM_API_KEY.`).
+CV üretimi bir LLM sağlayıcı anahtarı gerektirir, **ama bu anahtar `.env`'e konmaz**: her kullanıcı kendi anahtarını uygulamadaki **Hesap** ekranından girer ve üretim o kullanıcının kendi sağlayıcı hesabından faturalandırılır. Anahtar kaydedilirken sağlayıcıya karşı doğrulanır, şifreli saklanır ve bir daha geri gösterilmez.
+
+Tek kişilik bir kurulumda sunucunun `LLM_API_KEY` değerini paylaşmak isterseniz `ALLOW_SHARED_LLM_KEY=1` yapabilirsiniz; birden fazla hesabı olan bir kurulumda bunu açmayın, çünkü her kullanıcı sizin anahtarınızı harcar.
 
 ### Yol 2 — Veritabanı Docker'da, uygulama yerelde
 
@@ -91,7 +93,7 @@ Geliştirme veritabanınızın silinmesini bilerek göze alıyorsanız `CV_TAILO
 
 ## Production Dağıtım
 
-1. `.env.example` dosyasını `.env` olarak kopyalayın ve en az şu değerleri gerçek üretim değerleriyle değiştirin: `POSTGRES_PASSWORD`, `DATABASE_URL`, `JWT_SECRET`, `LLM_API_KEY`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_TOKEN_ENCRYPTION_KEY`, `FRONTEND_BASE_URL`.
+1. `.env.example` dosyasını `.env` olarak kopyalayın ve en az şu değerleri gerçek üretim değerleriyle değiştirin: `POSTGRES_PASSWORD`, `DATABASE_URL`, `JWT_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `GITHUB_OAUTH_CLIENT_SECRET`, `FRONTEND_BASE_URL`. `LLM_API_KEY` gerekmez; kullanıcılar kendi anahtarlarını girer.
    Arayüz kendi nginx'i üzerinden API'ye gittiği için `CORS_ALLOW_ORIGINS` boş bırakılabilir; API'yi başka bir origin'den çağıracaksanız o adresi buraya yazın.
 2. Production imajlarını build edip stack'i başlatın:
 

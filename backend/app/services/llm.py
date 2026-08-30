@@ -37,7 +37,10 @@ def _provider_error_message(provider: str, exc: Exception, timeout_seconds: floa
     if isinstance(exc, httpx.HTTPStatusError):
         status_code = exc.response.status_code
         if status_code in (401, 403):
-            return f"{provider} rejected the API key (HTTP {status_code}). Check LLM_API_KEY."
+            return (
+            f"{provider} rejected the API key (HTTP {status_code}). "
+            "Check the API key saved on your account."
+        )
         if status_code == 429:
             return f"{provider} rate limit reached (HTTP 429). Try again shortly."
         return f"{provider} request failed with HTTP {status_code}"
@@ -149,6 +152,53 @@ class LLMService:
                 await client.aclose()
 
         raise LLMProviderError(f"{provider} request failed")
+
+    async def verify_credentials(self) -> None:
+        """Check the configured key against the provider.
+
+        Saving a key that turns out to be wrong is only discovered several
+        minutes later, at the first pipeline step, so the credential endpoint
+        makes the cheapest possible call up front.
+        """
+        provider = self.config.llm_provider.lower().strip()
+        if provider == "mock":
+            return
+        if not self.config.llm_api_key:
+            raise LLMConfigurationError("LLM API key is not configured")
+
+        url, headers = self._verification_request(provider)
+        client = self._client or httpx.AsyncClient(timeout=self.config.llm_timeout_seconds)
+        should_close = self._client is None
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise LLMProviderError(
+                _provider_error_message(provider, exc, self.config.llm_timeout_seconds)
+            ) from exc
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise LLMProviderError(
+                _provider_error_message(provider, exc, self.config.llm_timeout_seconds)
+            ) from exc
+        finally:
+            if should_close:
+                await client.aclose()
+
+    def _verification_request(self, provider: str) -> tuple[str, dict[str, str]]:
+        if provider == "openai":
+            return (
+                "https://api.openai.com/v1/models",
+                {"Authorization": f"Bearer {self.config.llm_api_key}"},
+            )
+        if provider == "anthropic":
+            return (
+                "https://api.anthropic.com/v1/models",
+                {
+                    "x-api-key": self.config.llm_api_key or "",
+                    "anthropic-version": "2023-06-01",
+                },
+            )
+        raise LLMConfigurationError(f"Unsupported LLM provider: {provider}")
 
     def _provider_request(self, provider: str) -> tuple[str, dict[str, str]]:
         if provider == "openai":

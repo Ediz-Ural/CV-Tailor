@@ -44,18 +44,27 @@ def decode_github_oauth_state(state: str) -> UUID:
     return UUID(payload["sub"])
 
 
-def _github_token_cipher() -> Fernet:
-    if not settings.github_token_encryption_key:
-        raise ValueError("GITHUB_TOKEN_ENCRYPTION_KEY is not configured")
-    return Fernet(settings.github_token_encryption_key.encode("ascii"))
+def _secret_cipher() -> Fernet:
+    key = settings.secret_encryption_key
+    if not key:
+        raise ValueError("CREDENTIAL_ENCRYPTION_KEY is not configured")
+    return Fernet(key.encode("ascii"))
+
+
+def encrypt_secret(value: str) -> str:
+    return _secret_cipher().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(encrypted_value: str, *, label: str = "Secret") -> str:
+    try:
+        return _secret_cipher().decrypt(encrypted_value.encode("ascii")).decode("utf-8")
+    except InvalidToken as exc:
+        raise ValueError(f"{label} cannot be decrypted") from exc
 
 
 def encrypt_github_token(token: str) -> str:
-    return _github_token_cipher().encrypt(token.encode("utf-8")).decode("ascii")
+    return encrypt_secret(token)
 
 
 def decrypt_github_token(encrypted_token: str) -> str:
-    try:
-        return _github_token_cipher().decrypt(encrypted_token.encode("ascii")).decode("utf-8")
-    except InvalidToken as exc:
-        raise ValueError("GitHub token cannot be decrypted") from exc
+    return decrypt_secret(encrypted_token, label="GitHub token")

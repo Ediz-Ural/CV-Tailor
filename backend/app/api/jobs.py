@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,13 +13,17 @@ from app.models.job import Job
 from app.schemas.job import JobCreate, JobResponse
 from app.services.job_parser import JobFetchError, JobParser, fetch_single_job_page
 from app.services.llm import LLMService, LLMError
+from app.services.llm_credentials import LLMCredentialMissing, load_llm_service
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-def get_llm_service() -> LLMService:
-    return LLMService()
+def get_llm_service(current_user: CurrentUser, db: DbSession) -> LLMService:
+    try:
+        return load_llm_service(db, current_user.id)
+    except LLMCredentialMissing as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 async def get_job_fetch_client():
@@ -74,8 +78,16 @@ async def create_job(
 
 
 @router.get("", response_model=list[JobResponse])
-def list_jobs(db: DbSession, tenant: Tenant) -> list[Job]:
-    return list(db.scalars(tenant.apply(select(Job).order_by(Job.created_at, Job.id), Job)))
+def list_jobs(
+    db: DbSession,
+    tenant: Tenant,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[Job]:
+    statement = (
+        tenant.apply(select(Job).order_by(Job.created_at.desc(), Job.id), Job).limit(limit).offset(offset)
+    )
+    return list(db.scalars(statement))
 
 
 @router.get("/{job_id}", response_model=JobResponse)

@@ -74,15 +74,19 @@ def test_openai_strict_schema_requires_all_object_properties() -> None:
     assert set(schema["required"]) == {"summary", "required_skills", "preferred_skills", "years_experience", "key_terms"}
 
 
-def test_embed_pads_short_vector_to_database_dimension() -> None:
+def test_embed_rejects_a_model_with_the_wrong_dimension() -> None:
+    # Padding a short vector satisfies the column and silently ruins the
+    # geometry the selector ranks on, so a misconfigured model must fail loudly.
     class ShortEncoder:
         def encode(self, text: str, *, normalize_embeddings: bool) -> list[float]:
             return [0.5, 0.25]
 
-    vector = EmbeddingService(encoder=ShortEncoder()).embed("hello")
+    with pytest.raises(EmbeddingError) as caught:
+        EmbeddingService(encoder=ShortEncoder()).embed("hello")
 
-    assert len(vector) == EMBEDDING_DIMENSION
-    assert vector[:3] == [0.5, 0.25, 0.0]
+    assert "2 dimensions" in str(caught.value)
+    assert str(EMBEDDING_DIMENSION) in str(caught.value)
+    assert "EMBEDDING_MODEL" in str(caught.value)
 
 
 def test_embed_rejects_empty_vector() -> None:
@@ -211,5 +215,5 @@ async def test_rejected_api_key_error_names_the_setting_to_fix() -> None:
         with pytest.raises(LLMProviderError) as caught:
             await LLMService(config, client).structured("Parse this", Summary)
 
-    assert "LLM_API_KEY" in str(caught.value)
     assert "401" in str(caught.value)
+    assert "API key saved on your account" in str(caught.value)

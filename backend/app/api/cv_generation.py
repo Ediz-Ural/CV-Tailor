@@ -6,21 +6,29 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser
-from app.db.session import SessionLocal
+from app.core.config import settings
+from app.db.session import SessionLocal, get_db
 from app.graphs.cv_graph import run_cv_graph_with_progress
 from app.schemas.cv_generation import CVGenerationStartRequest, CVGenerationStartResponse, CVGenerationStatusResponse
 from app.services.cv_progress import cv_progress_store
 from app.services.embeddings import EmbeddingService
 from app.services.llm import LLMService
+from app.services.llm_credentials import LLMCredentialMissing, load_llm_service
 
 router = APIRouter(prefix="/cv-generation", tags=["cv-generation"])
 logger = logging.getLogger(__name__)
 
 
-def get_llm_service() -> LLMService:
-    return LLMService()
+def get_llm_service(current_user: CurrentUser, db: Annotated[Session, Depends(get_db)]) -> LLMService:
+    # Every run is billed to the account that started it, so the key comes from
+    # that user's own credential rather than a shared server key.
+    try:
+        return load_llm_service(db, current_user.id)
+    except LLMCredentialMissing as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 def get_embedding_service() -> EmbeddingService:
@@ -169,6 +177,20 @@ def start_cv_generation(
     llm_service: Annotated[LLMService, Depends(get_llm_service)],
     embedding_service: Annotated[EmbeddingService, Depends(get_embedding_service)],
 ) -> CVGenerationStartResponse:
+    # A stale run is only reclassified when it is read, so refuse on the live
+    # counts rather than letting a hung run block the account forever.
+    mine, total = cv_progress_store.active_counts(current_user.id)
+    if mine >= 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Zaten calisan bir CV uretimi var. Bitmesini bekleyin.",
+        )
+    if total >= settings.pipeline_max_concurrent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sunucu su anda kapasitede. Birazdan tekrar deneyin.",
+        )
+
     progress = cv_progress_store.create(current_user.id)
     background_tasks.add_task(
         _run_pipeline_background,

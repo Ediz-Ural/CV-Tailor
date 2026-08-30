@@ -14,6 +14,7 @@ from app.api.github import router as github_router
 from app.api.generated_cvs import router as generated_cvs_router
 from app.api.jobs import router as jobs_router
 from app.api.kvkk import router as kvkk_router
+from app.api.llm_credential import router as llm_credential_router
 from app.api.pool import router as pool_router
 from app.api.pdf_import import router as pdf_import_router
 from app.api.pool_items import router as pool_items_router
@@ -87,6 +88,7 @@ async def request_log_middleware(request: Request, call_next: Callable[[Request]
 app.include_router(kvkk_router)
 app.include_router(auth_router)
 app.include_router(profile_router)
+app.include_router(llm_credential_router)
 app.include_router(pool_router)
 app.include_router(pool_items_router)
 app.include_router(pdf_import_router)

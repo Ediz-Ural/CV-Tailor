@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -14,6 +15,9 @@ from app.schemas.github import GitHubRepoAnalysis
 from app.services.embeddings import EmbeddingService
 from app.services.item_extractor import ExtractedPoolItem, normalize_extracted_item
 from app.services.llm import LLMService
+from app.services.llm_credentials import LLMCredentialMissing, load_llm_service
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubConfigurationError(RuntimeError):
@@ -278,12 +282,24 @@ async def sync_github_repositories_for_user(user_id: UUID) -> None:
         connection = db.scalar(select(GitHubConnection).where(GitHubConnection.user_id == user_id))
         if connection is None:
             return
+        try:
+            llm_service = load_llm_service(db, user_id)
+        except LLMCredentialMissing:
+            # Repository analysis needs the user's own provider key. Without one
+            # there is nothing to sync, and this runs in the background where an
+            # exception would only surface in the logs.
+            logger.info(
+                "github_sync_skipped_without_llm_key",
+                extra={"event": "github_sync_skipped_without_llm_key", "user_id": str(user_id)},
+            )
+            return
+
         token = decrypt_github_token(connection.access_token_encrypted)
         items = await analyze_repositories_to_pool_items(
             user_id,
             db,
             GitHubAPIClient(token=token),
-            LLMService(),
+            llm_service,
             EmbeddingService(),
         )
         if items:
